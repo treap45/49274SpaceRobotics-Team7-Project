@@ -23,8 +23,7 @@ venv/
 /src/path_planner/
 /src/stage/
 /src/stage_ros2/
-/report/assignment_1_particle_filter/
-/report/assignment_2_path_planning/
+/report/
 /audit/
 
 # Collected data, trained weights, recordings
