@@ -1,0 +1,44 @@
+# ROS / Python generated files
+/build/
+/install/
+/log/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.venv/
+venv/
+
+# Local tooling and credentials
+/.vscode/
+/.agents/
+/.codex/
+.env
+.env.*
+!.env.example
+.DS_Store
+
+# Previous individual assignments and their simulator dependencies
+/src/particle_filter_localisation/
+/src/path_planner/
+/src/stage/
+/src/stage_ros2/
+/report/assignment_1_particle_filter/
+/report/assignment_2_path_planning/
+/audit/
+
+# Collected data, trained weights, recordings
+dataset/
+datasets/
+recordings/
+rosbags/
+*.bag
+*.db3
+*.mcap
+*.mp4
+*.pt
+*.pth
+*.onnx
+*.weights
+
+# Keep supplied Gazebo models, including .obj mesh files, under version control.
