@@ -109,6 +109,12 @@ Main implementation: [cave_explorer.py](src/cave_explorer/cave_explorer/cave_exp
 
 ## Development
 
+See [Workplan.md](Workplan.md) for task ownership, proposed module interfaces and integration milestones.
+
+The planned Python modules and `test/` directory have been scaffolded with
+ownership notes. These are placeholders; the running node still uses the original
+starter implementation.
+
 Create feature branches from `main` and merge through reviewed pull requests. Verify build and launch behaviour before merging.
 
 Build outputs, internal reports, meeting notes, collected datasets, trained weights and recordings are excluded from version control.
