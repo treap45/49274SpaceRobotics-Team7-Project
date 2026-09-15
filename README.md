@@ -1,4 +1,4 @@
-# Martian Cave Explorer
+# 49274SpaceRobotics-Team7-Project
 
 ROS 2 workspace for the 49274 Space Robotics team project. A simulated rover uses Gazebo Fortress, SLAM Toolbox and Nav2 to navigate a cave.
 
@@ -41,8 +41,8 @@ sudo apt install \
 This repository is a complete workspace. Clone it into a new directory:
 
 ```bash
-git clone https://github.com/treap45/space-robotics-team-project-2026.git
-cd space-robotics-team-project-2026
+git clone https://github.com/treap45/49274SpaceRobotics-Team7-Project.git
+cd 49274SpaceRobotics-Team7-Project
 source /opt/ros/humble/setup.bash
 colcon build --symlink-install --packages-select cave_explorer
 source install/setup.bash
