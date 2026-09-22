@@ -5,7 +5,7 @@
 - 采用模式一：按照系统模块与数据流分工。
 - 先完成 Perception 1–3、Planning 1–3，并跑通完整自主流程；随后共同选择 Advanced，重新评估工作量。
 - 成员姓名暂用 A/B/C，待团队填写。
-- 以下文件结构、接口和验收标准是开发建议；当前仓库仍为课程模板，已创建模块占位文件及 test/ 目录，模块逻辑尚未实现或接入主节点。
+- 以下文件结构、接口和验收标准是开发建议。`interfaces.py` 已按 §4 实现（frozen dataclass、状态枚举、构造时校验）；其余模块仍是占位文件，逻辑尚未实现或接入主节点。
 
 目标流程：**自主探索 → 检测 artefact → 地图定位 → 安全接近并检查 → 记录已检查 → 恢复探索。**
 
@@ -45,8 +45,8 @@
 
 ### B：定位、关联与检查目标
 
-1. 确认 RGB/depth 的对应关系、时间同步、深度单位、相机内参和 optical frame。
-2. 在检测框内选取有效深度，剔除 NaN、Inf、零值及明显背景；估计目标相机坐标并转换到 `map`。
+1. 相机内参、RGB/depth 配准和有效深度范围已从 URDF 确定，见 §5.1，不需要再自行测量；仍需确认的是深度单位、RGB 与 depth 的时间偏差，以及 optical frame 的实际投影对应关系。
+2. 在检测框内选取有效深度，剔除 NaN、Inf、零值及明显背景；估计目标相机坐标并转换到 `map`。**超出 depth 有效范围（§5.1：0.4–10 m）的检测必须判为定位失败**，不能采用被截断的深度值。
 3. 根据类别与空间距离关联多次观测，为同一目标提供稳定 `artifact_id`，融合位置并显示 RViz markers。
 4. 为目标生成安全的观察位姿：考虑机器人尺寸、障碍净空、standoff distance 和相机朝向。
 5. 与 C 联合检查目标可达性；接近过程中提供最新目标观测和必要的目标更新建议。
@@ -58,12 +58,14 @@
 ### C：探索、导航与状态机
 
 1. 保存完整 OccupancyGrid，区分未知、自由和占据区域，提取 frontier（自由空间与未知区域的边界）。
-2. 先实现简单目标选择，再加入信息增益、路径成本、重复访问和失败目标惩罚；显示候选及选中目标。
+2. 先实现简单目标选择，再加入信息增益、路径成本、重复访问和失败目标惩罚；RViz 需显示候选 frontier、选中目标**和规划路径**（作业 Planning 1 要求三者都展示）。
 3. 统一管理 Nav2 action：异步发送、接受/拒绝、反馈、结果、取消、超时；只根据真实结果判定成功。
 4. 检测到符合条件的新目标时暂停探索，调用 B 的观察位姿接口并执行接近与检查。
 5. 维护已检查目标、当前目标和尝试次数；目标丢失时重试一次，仍失败则放弃本次检查并恢复探索。
 6. 保存覆盖面积随时间的变化、实际行驶距离、导航失败次数和检查成功率。
 7. 主责 `cave_explorer.py` 的模块连接；A/B review 各自模块的接入。
+8. 定义 frontier 耗尽后的行为：回到已确认但未成功检查的目标，或放宽 frontier 最小尺寸阈值再试。洞穴有限，demo 时长内一定会进入这个状态，机器人不能停在原地。
+9. 提供 `test/` 下的共用假数据 fixture（假 `DetectionBatch`、`ArtifactTrack`、`InspectionGoal`），A/B 直接取用，避免三人各造一套形状不同的假数据。
 
 **职责边界：** 只有 C 的导航模块持有 `NavigateToPose` action client。A/B 不另外发送目标或发布 `/cmd_vel`，防止行为互相抢占。
 
@@ -98,7 +100,7 @@ src/cave_explorer/
 - 距离统一为米，角度为弧度；地图位置采用 `map` frame，导航位姿采用 `PoseStamped`。
 - `stamp_ns` 为原始观测的 ROS 仿真时间（整数纳秒）；超时使用同一 ROS 时钟。仿真重置/时间回退时清理旧缓存、目标与 action 记录。
 - 检测框采用原始 RGB 分辨率的 `(x_min, y_min, x_max, y_max)`，右下边界不包含在框内；A 负责撤销模型输入的缩放和 padding。
-- `class_name` 使用固定标签表。建议：`green_alien`、`green_crystals`、`white_sphere`、`ice_formation`、`blue_mushrooms`。
+- `class_name` 使用固定标签表：`green_alien`、`green_crystals`、`white_sphere`、`ice_formation`、`blue_mushrooms`。`worlds/mars_cave.sdf` 中这五类**各放置 6 个**（共 30 个目标），同类目标只能靠位置区分，数据关联不能按类别合并。
 - `confidence` 是检测器分数，不代表定位精度；具体检测阈值、聚类半径和检查参数放配置文件。
 - 未准备好、无检测、定位失败、目标不可达应有不同状态；不得用 `(0, 0)` 代表失败，因为原点是有效坐标。
 
@@ -126,6 +128,7 @@ DetectionBatch:
 - 输出即使在推理完成后才到达，也保留采集时间；B 必须使用对应时刻的 depth/TF。
 - A 不向此接口填入 `depth` 或 `map_x/map_y`，这些字段属于 B 的计算结果。
 - 原图用于定位与采集；绘制标注使用副本，避免修改下游输入。
+- 已在 `interfaces.py` 实现，两处需 A/B 评审：`detections` 用 `tuple` 而非 `list`，以落实 §4.1 的只读快照约定；`stop_sign` **不在**标签表内，构造 `Detection2D` 会直接报错，早期烟雾测试需另行约定临时标签或映射到现有五类。
 
 ### 4.3 B → C：目标地图快照
 
@@ -153,7 +156,7 @@ ArtifactTracker.snapshot() → list[ArtifactTrack]
 - 无有效深度或 TF 时，跳过该次定位并报告原因；历史目标仍可保留，但不能更新其 `last_seen_ns`。
 - `confirmed` 表示满足配置的观测确认规则。C 只选择已确认、属于检查类别且未成功检查的目标。
 - `last_seen_ns` 用于判断当前是否丢失目标；“历史上见过”不等于“当前仍在画面中”。
-- 最小版本在一次仿真运行内保持 ID 稳定；如后续允许合并已发布 ID，必须向 C 提供旧 ID 到新 ID 的映射。
+- **`artifact_id` 在 `confirmed` 之后才分配。** B 内部的临时 track 不对外暴露 ID，合并与去重全部发生在确认之前。C 本来就只处理已确认目标（见上条），两条边界对齐后对外 ID 永不变化，**旧 ID 到新 ID 的映射机制整个不需要**。考虑到每类有 6 个目标、单次观测的坏深度会产生伪目标，合并是必然会用到的，把它挡在 ID 分配之前能省掉大量复杂度。
 
 ### 4.4 B → C：观察目标与检查评估
 
@@ -167,25 +170,32 @@ InspectionPlanner.evaluate(track, robot_pose, now_ns)
 ```
 
 - `goal` 表示机器人应到达的观察位姿，不是 artefact 本体坐标。
-- B 检查局部安全距离和朝向；C 通过规划结果确认路径是否可达。几何安全不保证 Nav2 一定能到达。
+- B 检查局部安全距离和朝向；C 通过规划结果确认路径是否可达。B 依据 OccupancyGrid 判净空，Nav2 依据**膨胀后的 costmap** 判可行，这是两张不同的图；几何上安全的 standoff 位姿仍可能被 Nav2 直接 REJECTED。
+- 因此 `make_goal` 需要能给出**多个候选观察位姿**（不同方位角或更大 standoff），或接受一个 `exclude` 参数。C 被拒绝一次就换下一个候选，候选用完才进入 `DEFERRED`。重发同一个位姿必然再次被拒，一次拒绝不应该烧掉一个 artefact。
 - 接近时继续使用实时检测，避免频繁追逐位置噪声；重规划频率由 C 控制。
 - `SATISFIED` 应反映近期观测与观察距离/朝向等条件。仅收到 Nav2 成功结果不足以认定检查成功。
 
 ### 4.5 C 内部：探索与导航
 
 ```text
-FrontierExplorer.select_goal(map_snapshot, robot_pose, failed_goals)
+FrontierExplorer.select_goal(map_snapshot, robot_pose)
     → {status: READY | NOT_READY | NO_REACHABLE_FRONTIER,
        goal: PoseStamped | None, reason: str}
+FrontierExplorer.report_outcome(goal, status, reason) → None
 
 NavigationClient.send(goal) → request_id
 NavigationClient.cancel(request_id) → 异步取消请求
 NavigationClient.poll(request_id)
-    → PENDING | ACTIVE | SUCCEEDED | REJECTED | ABORTED | CANCELED | ERROR
+    → {status: PENDING | ACTIVE | SUCCEEDED | REJECTED | ABORTED
+               | CANCELED | ERROR,
+       distance_remaining: float | None}
 ```
 
-- 没有地图与暂时找不到可达 frontier 是两种情况；后者不能直接宣称整个洞穴已探索完成。
+- 失败与重复访问惩罚由 `FrontierExplorer` **内部**维护，按栅格 cell 索引并随时间衰减；不把 `failed_goals` 列表当参数传进来——goal 是连续位姿，比较需要距离阈值，列表还会无界增长。C 通过 `report_outcome` 回喂导航结果。
+- 没有地图与暂时找不到可达 frontier 是两种情况；后者不能直接宣称整个洞穴已探索完成，且必须有定义好的后续行为（见 §2 C.8）。
 - 每个回调携带 request ID，避免旧目标的结果覆盖新目标状态。
+- `poll` 同时返回 Nav2 feedback 的 `distance_remaining`，供 C.6 统计行驶距离、B.5 监控接近过程。模板已有 `feedback_callback`，不要在封装时把这个数据丢掉。
+- action 回调在 executor 线程写状态，`poll` 从 `main_loop` 读。二者必须在同一 callback group；若日后改用多线程 executor，`NavigationClient` 内部需要加锁。
 - 取消请求不等于取消已完成；等待原目标结束或确认取消后再下发新的检查目标。
 - B 的 `evaluate` 与 C 的导航反馈共同驱动状态机。
 
@@ -200,7 +210,9 @@ UNVISITED → IN_PROGRESS → VISITED
 
 每条记录包含本次尝试次数、状态及失败原因。C 将检查状态的只读快照传给 B 的 marker 发布函数，用颜色区分已检查、待检查和暂缓目标。
 
-`VISITED` 仅在检查成功时设置。重试上限为首次尝试后再重试一次；失败目标进入暂缓集合，防止下一帧检测立即触发无限重试。再次启用的冷却/新观测条件需由团队确定。
+`VISITED` 仅在检查成功时设置。重试上限为首次尝试后再重试一次；失败目标进入暂缓集合，防止下一帧检测立即触发无限重试。
+
+**`DEFERRED` 是本次运行的终态，不再重新启用。** 作业 Planning 3 原文为「if still unsuccessful, abandon the attempt and return to exploration」，永久放弃符合要求。这样实现最简单，且不存在无限重试风险。「冷却后重试」留作报告里 Planning 3 要求的「如果有更多时间会如何提升鲁棒性」。
 
 ## 5. ROS 接入与现有模板注意点
 
@@ -208,16 +220,32 @@ UNVISITED → IN_PROGRESS → VISITED
 |---|---|---|
 | `/camera/image` | 已桥接 RGB Image | A 使用；C 主节点接入 |
 | `/camera/depth/image` | 已桥接 depth Image，主节点尚未用于定位 | B 使用；C 主节点接入 |
-| CameraInfo | 当前桥接配置未配置 | B 确认来源，必要时添加桥接或显式相机模型配置 |
+| CameraInfo | **未桥接**；内参已从 URDF 算出，见 §5.1 | C 写入 `config/` 作为常量，B 直接读；不必等桥接调通 |
 | TF | 模板查询 `map → base_link` | B 增加观测时刻的相机坐标变换 |
 | `/map` | 主节点目前只保存边界 | C 保存完整地图并提供给 B |
 | `/navigate_to_pose` | 已有 action client | C 接管并完善结果、取消、失败处理 |
 | `/detections_image` | 已用于 RViz | A 保留输出及采集 header |
 | `/marker_array_artifacts` | 已有 marker 框架 | B 发布位置，结合 C 提供的检查状态 |
 
-模板相机配置含 `gz_frame_id=camera_link`，URDF 同时定义了 optical frames。B 必须验证图像投影坐标与 TF 的对应关系，不能直接把 optical 坐标当作 `camera_link` 坐标。RGB 与 depth 的尺寸、配准和时间偏差也需先确认；不满足时应转换或拒绝该次定位。
+模板相机配置含 `gz_frame_id=camera_link`，而 URDF 另外定义了 `camera_rgb_optical_frame` 和 `camera_depth_optical_frame`。图像 header 带的是 `camera_link`，光学约定（z 向前、x 向右、y 向下）在 optical frame 上。B 必须显式处理这个旋转，不能直接拿 header 里的 frame 查 TF 就当成投影坐标系。
 
-主节点应保留能按采集时间匹配的 depth 缓存，并设置最大同步误差。推理不能长时间阻塞导航回调；若使用工作线程，采用有界队列和线程安全快照，训练过程放在节点之外。
+主节点应保留能按采集时间匹配的 depth 缓存，并设置最大同步误差。训练过程放在节点之外。
+
+### 5.1 仿真参数（已从 `urdf/mars_explorer.gazebo.xacro` 确认）
+
+| 参数 | 值 | 对设计的影响 |
+|---|---|---|
+| RGB / depth 分辨率 | 均为 720 × 480 | 同一个 `rgbd_camera` sensor 输出，像素一一对应，**不需要配准转换** |
+| `horizontal_fov` | 2.0944 rad = 120° | 推出 `fx = fy = 207.84`、`cx = 360.0`、`cy = 240.0`（vfov 98.2°） |
+| depth clip | **0.4 – 10 m** | 超出范围没有有效深度；10 m 外的检测无法定位 |
+| RGB clip | 0.1 – 40 m | 看得见 ≠ 定位得了，两者差 30 m |
+| `update_rate` | **3 Hz** | 检测频率上限；也意味着阻塞风险远小于预期 |
+
+三条由此确定的决定：
+
+- **B 的定位必须先判距离。** 10 m 外返回定位失败，不要用截断的深度值。
+- **C 的探索策略要保证接近到 10 m 以内。** 如果 frontier 选择总往远处跳，会反复出现「看见但定位不了」；状态机也不能在远距离检测时就切入检查行为，那时还没有 `map` 坐标。
+- **先用单线程 executor，不要预先搭工作线程。** 帧间隔 333 ms、`main_loop` timer 200 ms，而 `main_loop` 只负责选目标，实际运动由 Nav2 控制。CascadeClassifier 级别的推理无感；CPU 上的 YOLO 会把 `main_loop` 拖到 2–3 Hz，对选目标而言可接受。等 A 的真实模型出来实测单帧耗时，超过约 300 ms 再引入有界队列或 `MultiThreadedExecutor`。四周时间内提前加这层复杂度是负债。
 
 ## 6. 集成顺序与验收
 
@@ -232,6 +260,17 @@ UNVISITED → IN_PROGRESS → VISITED
 | 5：Advanced 决策 | 全员评估 | 全员评估 | 全员评估 | 基础流程可重复运行后，根据剩余时间与兴趣选题和分工 |
 
 建议 10 月 4 日前完成基础集成，10 月 5–11 日用于选定的 Advanced，10 月 12–18 日用于稳定性测试和彩排；若基础进度滞后，及时调整 Advanced 范围。这些日期是建议，待团队确认。
+
+### 两级测试
+
+上表的「联合验收」是分钟级的仿真验收，每周跑。日常迭代靠秒级单测，否则每改一行都要等 Gazebo + Nav2 + SLAM 起一两分钟。
+
+| 层级 | 覆盖 | 依赖 | 频率 |
+|---|---|---|---|
+| 模块单测 | `frontier_explorer`：合成 `OccupancyGrid`（numpy 数组 + 已知 unknown/free/occupied 分布），验证 frontier 提取与目标选择<br>`navigation_client`：对 stub action server 测 send/cancel/poll 与各终态<br>`behaviour_manager`：纯状态机，用假 track 驱动 | 仅 `nav_msgs`/`geometry_msgs`，`behaviour_manager` 完全不需要 ROS 运行时 | 每次提交 |
+| 仿真验收 | 上表阶段 1–4 的联合验收 | 完整三个 launch | 每周至少一次 |
+
+假数据 fixture 由 C 统一提供（见 §2 C.9）。`interfaces.py` 有构造时校验，fixture 构造得出来即说明形状合法。
 
 ### 基础功能验收清单
 
@@ -250,13 +289,15 @@ UNVISITED → IN_PROGRESS → VISITED
 - C 协调主节点集成；A/B 分别验证自己的数据进入主节点后仍满足契约。
 - 接口变更先更新 `interfaces.py` 设计和本文，随同调用方一起修改；每周至少一次联合运行。
 - 引入者负责补充依赖声明、配置和 README，使其他成员可从干净 checkout 复现。
+- 外部库和工具可以用，但必须标注来源；算法可以参考思路，**核心逻辑要自己写**。作业原文：「You may draw inspiration from online resources, but you must write your own code」，且提交的代码会做相似度检查，每人都要能解释自己那部分怎么工作。
 - A/B/C 分别整理自己对应任务的截图、方法、数据与贡献记录；全体准备现场讲解。
 - 数据集、权重、录制、报告及内部会议材料按现有忽略规则另行共享；本文件作为仓库中的开发协作规范。
 
 ### 尚待确认
 
 - A/B/C 姓名、每周集成时间。
-- 检测模型、标签表、数据与权重共享方式。
-- 相机模型来源、RGB/depth 同步容差、depth 单位和 TF 校验结果。
-- 检查类别、安全距离、丢失超时、确认阈值、失败目标再次启用规则。
-- 基础验收后选择的 Advanced 及其负责人；当前不指定任何一项。
+- 检测模型、数据与权重共享方式。
+- 早期烟雾测试是否给 `stop_sign` 留一个临时标签（见 §4.2）。
+- RGB/depth 同步容差、depth 单位和 TF 校验结果。相机内参和配准已定，见 §5.1。
+- 检查类别、安全距离、丢失超时、确认阈值。失败目标的再次启用规则已定：不再启用，见 §4.6。
+- 基础验收后选择的 Advanced 及其负责人；当前不指定任何一项。Advanced 2（距离变换分析）和 Advanced 4（在线路线图）可复用 Assignment 2 的代码，如倾向这两项可提前定，边做基础任务边攒。
