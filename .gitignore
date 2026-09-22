@@ -12,6 +12,7 @@ venv/
 # Local tooling and credentials
 /.vscode/
 /.agents/
+/.claude/
 /.codex/
 .env
 .env.*
