@@ -178,10 +178,10 @@ InspectionPlanner.evaluate(track, robot_pose, now_ns)
 ### 4.5 C 内部：探索与导航
 
 ```text
-FrontierExplorer.select_goal(map_snapshot, robot_pose)
+FrontierExplorer.select_goal(map_snapshot, robot_xy, now_ns)
     → {status: READY | NOT_READY | NO_REACHABLE_FRONTIER,
        goal: PoseStamped | None, reason: str}
-FrontierExplorer.report_outcome(goal, status, reason) → None
+FrontierExplorer.report_outcome(goal, status, reason, now_ns) → None
 
 NavigationClient.send(goal) → request_id
 NavigationClient.cancel(request_id) → 异步取消请求
