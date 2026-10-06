@@ -1,9 +1,30 @@
-"""Shared data contracts.
+"""Shared data contracts for the cave explorer project."""
 
-Owner: A/B/C (joint review).
-Status: placeholder; not yet implemented or connected to the ROS node.
-Contract: repository-root Workplan.md.
+from dataclasses import dataclass
+from typing import List, Tuple
 
-Define the agreed detection, track, goal and status types from Workplan.md.
-Coordinate changes with all consumers before implementation.
-"""
+
+@dataclass
+class Detection2D:
+    class_name: str
+    confidence: float
+    bbox_xyxy: Tuple[float, float, float, float]
+
+
+@dataclass
+class DetectionBatch:
+    stamp_ns: int
+    source_frame_id: str
+    image_width: int
+    image_height: int
+    detections: List[Detection2D]
+
+
+@dataclass
+class ArtifactTrack:
+    artifact_id: int
+    class_name: str
+    position_map: Tuple[float, float, float]
+    last_seen_ns: int
+    observation_count: int
+    confirmed: bool
