@@ -108,9 +108,9 @@ class CaveExplorer(Node):
         # Action client for nav2
         self.nav2_action_client_ = ActionClient(self, NavigateToPose, 'navigate_to_pose')
         self.get_logger().warn('Waiting for navigate_to_pose action...')
-        self.nav2_action_client_.wait_for_server()
-        self.get_logger().warn('navigate_to_pose connected')
-        self.ready_for_next_goal_ = True
+        # self.nav2_action_client_.wait_for_server()
+        self.get_logger().warn('navigate_to_pose wait skipped for testing')
+        # self.ready_for_next_goal_ = True
         self.declare_parameter('print_feedback', rclpy.Parameter.Type.BOOL)
 
         # Publisher for the goal pose visualisation
@@ -124,7 +124,14 @@ class CaveExplorer(Node):
         self.declare_parameter('computer_vision_model_filename', rclpy.Parameter.Type.STRING)
         self.computer_vision_model_ = cv2.CascadeClassifier(self.get_parameter('computer_vision_model_filename').value)
         self.image_sub_ = self.create_subscription(Image, 'camera/image', self.image_callback, 1)
+        self.latest_depth_image_ = None
 
+        self.depth_sub_ = self.create_subscription(
+            Image,
+            'camera/depth/image',
+            self.depth_callback,
+            1
+        )
         # Timer for main loop
         self.main_loop_timer_ = self.create_timer(0.2, self.main_loop)
     
@@ -175,7 +182,12 @@ class CaveExplorer(Node):
         # self.get_logger().warn('Map received:')
         # self.get_logger().warn(f'  xlim = [{self.xlim_[0]:.2f}, {self.xlim_[1]:.2f}]')
         # self.get_logger().warn(f'  ylim = [{self.ylim_[0]:.2f}, {self.ylim_[1]:.2f}]')
-    
+    def depth_callback(self, depth_msg):
+        """Store the latest depth image."""
+        self.latest_depth_image_ = self.cv_bridge_.imgmsg_to_cv2(
+            depth_msg,
+            desired_encoding='32FC1'
+        )    
     def image_callback(self, image_msg):
         """
         Recieve an RGB image.
