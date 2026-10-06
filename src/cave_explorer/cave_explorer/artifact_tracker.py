@@ -185,7 +185,7 @@ class ArtifactTracker:
         """Check whether a depth value is usable."""
 
         return (
-            depth_m > 0.0
+            depth_m > 0.4
             and depth_m <= 10.0
             and depth_m == depth_m
             and depth_m != float("inf")
