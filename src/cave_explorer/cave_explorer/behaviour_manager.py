@@ -34,6 +34,12 @@ Rules carried over from Workplan.md:
   retry starts where the failed attempt ended, still close and still not
   seeing the artefact, so counting it at once would fail the retry on its first
   tick. The retry also drives to a new viewpoint, excluding every one tried.
+* A goal the robot makes no progress towards - less than ``stuck_distance_m``
+  in ``stuck_timeout_sec`` - is given up as failed: an exploration goal is
+  reported ``ABORTED`` (so the explorer cools down near it) and replaced, an
+  inspection viewpoint is swapped for another. In simulation the robot sat on
+  a green_crystals artefact the lidar cannot see while Nav2 retried for three
+  120 s timeouts in a row.
 * A Nav2 rejection moves on to another viewpoint, excluding the ones already
   tried; it does not by itself use up an attempt (4.4).
 * ``DEFERRED`` is terminal for the run (4.6).
@@ -116,12 +122,21 @@ class BehaviourConfig:
     switch_distance_m: float = 2.0      # current goal counts as still valid within this
     exhausted_retry_sec: float = 5.0
     arrival_tolerance_m: float = 2.0    # Nav2 xy_goal_tolerance is 1.0 m
+    stuck_timeout_sec: float = 20.0     # longer than Nav2's spin/wait recoveries
+    stuck_distance_m: float = 0.5
 
 
 @dataclass
 class _Exploration:
     request_id: int
     goal: PoseStamped
+
+
+@dataclass
+class _Progress:
+    """Where the robot last moved ``stuck_distance_m`` from, and when."""
+    xy: tuple
+    since_ns: int
 
 
 @dataclass
@@ -154,6 +169,7 @@ class BehaviourManager:
         self._exploration: _Exploration | None = None
         self._inspection: _Inspection | None = None
         self._last_plan_ns: int | None = None
+        self._progress: _Progress | None = None
 
     @property
     def records(self) -> tuple[InspectionRecord, ...]:
@@ -196,14 +212,19 @@ class BehaviourManager:
         current = self._exploration
         if current is not None:
             progress = self._navigator.poll(current.request_id)
-            if not progress.is_terminal:
+            if progress.is_terminal:
+                status, reason = progress.status, progress.reason
+                if progress.succeeded and not self._arrived(robot_pose, current.goal):
+                    status, reason = NavigationStatus.CANCELED, 'success reported away from the goal'
+                    self._log(f'exploration goal {_xy(current.goal)}: {reason}; ignoring it')
+            elif self._stuck(now_ns, robot_pose):
+                status = NavigationStatus.ABORTED
+                reason = f'no progress for {self.config.stuck_timeout_sec:g} s'
+                self._log(f'exploration goal {_xy(current.goal)}: {reason}; giving it up')
+            else:
                 if self._due(now_ns, self.config.replan_period_sec):
                     self._replan_while_driving(now_ns, robot_pose, map_msg, current)
                 return
-            status, reason = progress.status, progress.reason
-            if progress.succeeded and not self._arrived(robot_pose, current.goal):
-                status, reason = NavigationStatus.CANCELED, 'success reported away from the goal'
-                self._log(f'exploration goal {_xy(current.goal)}: {reason}; ignoring it')
             self._explorer.report_outcome(current.goal, status, reason, now_ns)
             self._exploration = None
 
@@ -232,14 +253,30 @@ class BehaviourManager:
                           for frontier in self._explorer.frontiers)
         if not still_there:
             self._log('frontier being explored has been mapped; switching goal')
-            self._send_exploration(result)
+            self._send_exploration(result, keep_progress=True)
 
-    def _send_exploration(self, result: ExplorationGoal) -> None:
-        request_id = self._navigator.send(result.goal,
-                                          timeout_sec=self.config.explore_goal_timeout_sec)
+    def _send_exploration(self, result: ExplorationGoal, keep_progress: bool = False) -> None:
+        request_id = self._send(result.goal, self.config.explore_goal_timeout_sec,
+                                keep_progress)
         self._exploration = _Exploration(request_id, result.goal)
         self.mode = Mode.EXPLORING
         self.status = f'exploring: {result.reason}'
+
+    def _send(self, goal: PoseStamped, timeout_sec: float, keep_progress: bool = False) -> int:
+        """A new goal gets the full stuck timeout, except a switch made while
+        driving: switching every few seconds must not hide that the robot is stuck."""
+        if not keep_progress:
+            self._progress = None
+        return self._navigator.send(goal, timeout_sec=timeout_sec)
+
+    def _stuck(self, now_ns, robot_pose) -> bool:
+        """True once the robot has moved less than ``stuck_distance_m`` for ``stuck_timeout_sec``."""
+        here = (robot_pose.x, robot_pose.y)
+        progress = self._progress
+        if progress is None or math.dist(here, progress.xy) > self.config.stuck_distance_m:
+            self._progress = _Progress(here, now_ns)
+            return False
+        return now_ns - progress.since_ns > self.config.stuck_timeout_sec * 1e9
 
     def _arrived(self, robot_pose, goal: PoseStamped) -> bool:
         return math.dist((robot_pose.x, robot_pose.y), _xy(goal)) <= self.config.arrival_tolerance_m
@@ -299,12 +336,16 @@ class BehaviourManager:
             return
         progress = self._navigator.poll(inspection.request_id)
         if not progress.is_terminal:
+            if self._stuck(now_ns, robot_pose):
+                self._log(f'viewpoint for artefact {inspection.artifact_id}: no progress for '
+                          f'{self.config.stuck_timeout_sec:g} s; trying another')
+                inspection.request_id = None
             return
         if progress.succeeded and not self._arrived(robot_pose, inspection.tried[-1]):
             self._log(f'viewpoint for artefact {inspection.artifact_id}: success reported '
                       'away from the goal; sending it again')
-            inspection.request_id = self._navigator.send(
-                inspection.tried[-1], timeout_sec=self.config.attempt_timeout_sec)
+            inspection.request_id = self._send(inspection.tried[-1],
+                                               self.config.attempt_timeout_sec)
             return
         if progress.succeeded:
             if inspection.arrived_ns is None:
@@ -332,8 +373,7 @@ class BehaviourManager:
             self._attempt_failed(now_ns, f'no safe viewpoint: {plan.reason}')
             return
         inspection.tried.append(plan.goal)
-        inspection.request_id = self._navigator.send(
-            plan.goal, timeout_sec=self.config.attempt_timeout_sec)
+        inspection.request_id = self._send(plan.goal, self.config.attempt_timeout_sec)
 
     def _attempt_failed(self, now_ns, reason: str) -> None:
         artifact_id = self._inspection.artifact_id

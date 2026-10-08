@@ -434,3 +434,70 @@ def test_retry_drives_to_a_new_viewpoint():
     assert world.record(1).attempts == 2
     assert world.nav.last_goal is not first
     assert world.planner.excluded[-1] == (first.pose.position.x,)
+
+
+# ----------------------------------------------------------------------
+# Stuck watchdog
+# ----------------------------------------------------------------------
+
+def test_exploration_goal_without_progress_is_given_up():
+    """Regression: the robot sat on green_crystals for three 120 s timeouts."""
+    world = World(stuck_timeout_sec=20.0)
+    world.step()
+    stuck_goal = world.nav.last_goal
+    world.explorer.keep_frontier_at(stuck_goal.pose.position.x)
+    for _ in range(5):
+        world.step(seconds=5.0)              # the clock starts on the first check
+    assert world.nav.last_goal is stuck_goal
+    world.step(seconds=5.0)                  # now more than 20 s without moving
+    assert world.explorer.reports[-1] == (stuck_goal.pose.position.x, NavigationStatus.ABORTED)
+    assert world.nav.last_goal is not stuck_goal
+    assert any('no progress' in line for line in world.log)
+
+
+def test_a_moving_robot_is_not_stuck():
+    world = World(stuck_timeout_sec=20.0)
+    world.step()
+    goal = world.nav.last_goal
+    world.explorer.keep_frontier_at(goal.pose.position.x)
+    for i in range(10):
+        world.robot = SimpleNamespace(x=0.6 * (i + 1), y=0.0)
+        world.step(seconds=5.0)
+    assert world.nav.last_goal is goal
+    assert world.explorer.reports == []
+
+
+def test_a_new_goal_gets_the_full_timeout():
+    world = World(stuck_timeout_sec=20.0)
+    world.step()
+    world.explorer.keep_frontier_at(world.nav.last_goal.pose.position.x)
+    world.step(seconds=15.0)
+    world.nav.finish(world.nav.last_id, NavigationStatus.SUCCEEDED)
+    world.robot = SimpleNamespace(x=world.nav.last_goal.pose.position.x, y=0.0)
+    world.step()                             # reached; next goal sent from here
+    second = world.nav.last_goal
+    world.explorer.keep_frontier_at(second.pose.position.x)
+    world.step(seconds=10.0)
+    world.step(seconds=8.0)
+    world.step(seconds=8.0)                  # 16 s since the first check: not stuck yet
+    assert world.nav.last_goal is second
+
+
+def test_stuck_on_the_way_to_a_viewpoint_tries_another():
+    world = World(stuck_timeout_sec=20.0)
+    world.step(tracks=[track()])
+    first = world.nav.last_goal
+    for _ in range(6):
+        world.step(tracks=[track()], seconds=5.0)
+    world.step(tracks=[track()])             # plans the next viewpoint
+    assert world.nav.last_goal is not first
+    assert world.record(1).state is InspectionState.IN_PROGRESS
+    assert world.record(1).attempts == 1
+
+
+def test_switching_goals_while_stuck_does_not_reset_the_watchdog():
+    world = World(stuck_timeout_sec=20.0)
+    world.step()
+    for _ in range(6):
+        world.step(seconds=5.0)              # the frontier keeps "moving": goal switches
+    assert any('no progress' in line for line in world.log)
