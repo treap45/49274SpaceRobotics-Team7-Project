@@ -24,6 +24,16 @@ Rules carried over from Workplan.md:
   confirmed tracks of the inspection classes only.
 * ``VISITED`` needs B's ``evaluate`` to say ``SATISFIED``. A Nav2 success alone
   is not an inspection (4.4).
+* A Nav2 success more than ``arrival_tolerance_m`` from the goal is not an
+  arrival. Nav2 Humble can report success for a goal that preempted another
+  just as the controller reached the old one (seen in simulation: success
+  0.2 s after sending a goal 9 m away). Exploration reports that as
+  ``CANCELED`` so the frontier is neither visited nor penalised; an inspection
+  viewpoint is sent again.
+* ``LOST`` only counts once the robot has reached the attempt's viewpoint. A
+  retry starts where the failed attempt ended, still close and still not
+  seeing the artefact, so counting it at once would fail the retry on its first
+  tick. The retry also drives to a new viewpoint, excluding every one tried.
 * A Nav2 rejection moves on to another viewpoint, excluding the ones already
   tried; it does not by itself use up an attempt (4.4).
 * ``DEFERRED`` is terminal for the run (4.6).
@@ -55,6 +65,7 @@ from cave_explorer.interfaces import (
     InspectionRecord,
     InspectionState,
     NavigationProgress,
+    NavigationStatus,
 )
 
 
@@ -104,6 +115,7 @@ class BehaviourConfig:
     replan_period_sec: float = 4.0      # SLAM republishes the map every 2 s
     switch_distance_m: float = 2.0      # current goal counts as still valid within this
     exhausted_retry_sec: float = 5.0
+    arrival_tolerance_m: float = 2.0    # Nav2 xy_goal_tolerance is 1.0 m
 
 
 @dataclass
@@ -116,7 +128,8 @@ class _Exploration:
 class _Inspection:
     artifact_id: int
     started_ns: int
-    tried: list = field(default_factory=list)
+    tried: list = field(default_factory=list)       # viewpoints of this attempt
+    excluded: list = field(default_factory=list)    # viewpoints of earlier attempts
     request_id: int | None = None
     arrived_ns: int | None = None
 
@@ -187,8 +200,11 @@ class BehaviourManager:
                 if self._due(now_ns, self.config.replan_period_sec):
                     self._replan_while_driving(now_ns, robot_pose, map_msg, current)
                 return
-            self._explorer.report_outcome(current.goal, progress.status, progress.reason,
-                                          now_ns)
+            status, reason = progress.status, progress.reason
+            if progress.succeeded and not self._arrived(robot_pose, current.goal):
+                status, reason = NavigationStatus.CANCELED, 'success reported away from the goal'
+                self._log(f'exploration goal {_xy(current.goal)}: {reason}; ignoring it')
+            self._explorer.report_outcome(current.goal, status, reason, now_ns)
             self._exploration = None
 
         if self.mode is Mode.EXHAUSTED and not self._due(now_ns,
@@ -224,6 +240,9 @@ class BehaviourManager:
         self._exploration = _Exploration(request_id, result.goal)
         self.mode = Mode.EXPLORING
         self.status = f'exploring: {result.reason}'
+
+    def _arrived(self, robot_pose, goal: PoseStamped) -> bool:
+        return math.dist((robot_pose.x, robot_pose.y), _xy(goal)) <= self.config.arrival_tolerance_m
 
     def _plan(self, now_ns, robot_pose, map_msg) -> ExplorationGoal:
         self._last_plan_ns = now_ns
@@ -270,7 +289,8 @@ class BehaviourManager:
         if assessment.status is InspectionEvaluation.SATISFIED:
             self._inspection_succeeded(assessment.reason)
             return
-        if assessment.status is InspectionEvaluation.LOST:
+        if (assessment.status is InspectionEvaluation.LOST
+                and inspection.arrived_ns is not None):
             self._attempt_failed(now_ns, f'artefact lost: {assessment.reason}')
             return
 
@@ -279,6 +299,12 @@ class BehaviourManager:
             return
         progress = self._navigator.poll(inspection.request_id)
         if not progress.is_terminal:
+            return
+        if progress.succeeded and not self._arrived(robot_pose, inspection.tried[-1]):
+            self._log(f'viewpoint for artefact {inspection.artifact_id}: success reported '
+                      'away from the goal; sending it again')
+            inspection.request_id = self._navigator.send(
+                inspection.tried[-1], timeout_sec=self.config.attempt_timeout_sec)
             return
         if progress.succeeded:
             if inspection.arrived_ns is None:
@@ -299,7 +325,7 @@ class BehaviourManager:
                 now_ns, f'no reachable viewpoint after {len(inspection.tried)} tries')
             return
         plan = self._planner.make_goal(track, robot_pose, map_msg,
-                                       exclude=tuple(inspection.tried))
+                                       exclude=tuple(inspection.excluded + inspection.tried))
         if plan.status is InspectionGoalStatus.NOT_READY:
             return     # bounded by the attempt timeout
         if plan.status is InspectionGoalStatus.NO_SAFE_GOAL:
@@ -314,7 +340,9 @@ class BehaviourManager:
         attempts = self._records[artifact_id].attempts
         if attempts < self.config.max_attempts:
             self._log(f'artefact {artifact_id} attempt {attempts} failed ({reason}); retrying')
-            self._inspection = _Inspection(artifact_id, now_ns)
+            previous = self._inspection
+            self._inspection = _Inspection(artifact_id, now_ns,
+                                           excluded=previous.excluded + previous.tried)
             self._set_record(artifact_id, InspectionState.IN_PROGRESS, attempts + 1, reason)
             self.status = f'inspecting artefact {artifact_id}, attempt {attempts + 1}'
             return
