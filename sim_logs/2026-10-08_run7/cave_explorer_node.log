@@ -1,0 +1,392 @@
+[INFO] [launch]: All log files can be found below /home/tianya/.ros/log/2026-10-08-21-39-19-986586-tianyas-rog-strix-g16-g614fm-g614fm-56905
+[INFO] [launch]: Default logging verbosity is set to INFO
+[INFO] [cave_explorer-1]: process started with pid [56938]
+[cave_explorer-1] [INFO] [1791455961.067269087] [cave_explorer_node]: Detector loaded: /home/tianya/ros_ws/install/cave_explorer/share/cave_explorer/models/artifact_yolov8n.pt
+[cave_explorer-1] [INFO] [1791455961.075555682] [cave_explorer_node]: Inspecting classes: ['green_crystals', 'white_sphere']
+[cave_explorer-1] [WARN] [1791455961.076641986] [cave_explorer_node]: Waiting for transform... Have you launched a SLAM node?
+[cave_explorer-1] [INFO] [1791455962.098924071] [cave_explorer_node]: navigation request 1: sent goal (5.74, 0.56) in map
+[cave_explorer-1] [INFO] [1791455962.099085193] [cave_explorer_node]: [EXPLORING] exploring: frontier 135.6 m long, 6.3 m away
+[cave_explorer-1] [INFO] [1791455966.099198156] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791455966.099633982] [cave_explorer_node]: navigation request 2: sent goal (8.13, 0.56) in map
+[cave_explorer-1] [INFO] [1791455966.099840068] [cave_explorer_node]: [EXPLORING] exploring: frontier 96.0 m long, 5.4 m away
+[cave_explorer-1] [INFO] [1791455966.109538225] [cave_explorer_node]: navigation request 1: CANCELED (superseded by request 2)
+[cave_explorer-1] [INFO] [1791455966.497724840] [cave_explorer_node]: artefact 1 (green_crystals) added to inspect
+[cave_explorer-1] [INFO] [1791455966.497946235] [cave_explorer_node]: inspecting artefact 1 (green_crystals), attempt 1
+[cave_explorer-1] [INFO] [1791455966.498612132] [cave_explorer_node]: navigation request 3: sent goal (6.88, 3.32) in map
+[cave_explorer-1] [INFO] [1791455966.498745351] [cave_explorer_node]: [INSPECTING] inspecting artefact 1 (green_crystals), attempt 1
+[cave_explorer-1] [INFO] [1791455966.499819963] [cave_explorer_node]: navigation request 2: CANCELED (superseded by request 3)
+[cave_explorer-1] [INFO] [1791455971.759444831] [cave_explorer_node]: navigation request 3: SUCCEEDED
+[cave_explorer-1] [INFO] [1791455973.298135575] [cave_explorer_node]: artefact 1 inspected (conditions held for 2.00 s at 2.02 m)
+[cave_explorer-1] [INFO] [1791455973.300134016] [cave_explorer_node]: navigation request 4: sent goal (9.33, 4.43) in map
+[cave_explorer-1] [INFO] [1791455973.300306970] [cave_explorer_node]: [EXPLORING] exploring: frontier 2.4 m long, 4.8 m away
+[cave_explorer-1] [INFO] [1791455994.097662306] [cave_explorer_node]: exploration goal (9.325134376013498, 4.431331745049731): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791455994.099756417] [cave_explorer_node]: navigation request 5: sent goal (14.73, 4.43) in map
+[cave_explorer-1] [INFO] [1791455994.099932126] [cave_explorer_node]: [EXPLORING] exploring: frontier 19.2 m long, 9.3 m away
+[cave_explorer-1] [INFO] [1791455994.101946638] [cave_explorer_node]: navigation request 4: CANCELED (superseded by request 5)
+[cave_explorer-1] [INFO] [1791456014.498141670] [cave_explorer_node]: exploration goal (14.72513459059022, 4.431331745049731): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791456014.500027381] [cave_explorer_node]: navigation request 6: sent goal (25.53, 2.63) in map
+[cave_explorer-1] [INFO] [1791456014.500186699] [cave_explorer_node]: [EXPLORING] exploring: frontier 12.9 m long, 18.9 m away
+[cave_explorer-1] [INFO] [1791456014.501727023] [cave_explorer_node]: navigation request 5: CANCELED (superseded by request 6)
+[cave_explorer-1] [INFO] [1791456034.898370731] [cave_explorer_node]: exploration goal (25.52513501974366, 2.6313316735241576): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791456034.900300805] [cave_explorer_node]: navigation request 7: sent goal (24.93, 7.43) in map
+[cave_explorer-1] [INFO] [1791456034.900495440] [cave_explorer_node]: [EXPLORING] exploring: frontier 2.1 m long, 22.5 m away
+[cave_explorer-1] [INFO] [1791456034.901996711] [cave_explorer_node]: navigation request 6: CANCELED (superseded by request 7)
+[cave_explorer-1] [INFO] [1791456055.297609442] [cave_explorer_node]: exploration goal (24.925134995901804, 7.431331864259021): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791456055.299430292] [cave_explorer_node]: navigation request 8: sent goal (27.33, 8.33) in map
+[cave_explorer-1] [INFO] [1791456055.299568420] [cave_explorer_node]: [EXPLORING] exploring: frontier 5.1 m long, 25.8 m away
+[cave_explorer-1] [INFO] [1791456055.301187873] [cave_explorer_node]: navigation request 7: CANCELED (superseded by request 8)
+[cave_explorer-1] [INFO] [1791456075.698057669] [cave_explorer_node]: exploration goal (27.325135091269235, 8.331331900021809): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791456075.702915125] [cave_explorer_node]: navigation request 9: sent goal (13.53, 3.23) in map
+[cave_explorer-1] [INFO] [1791456075.703064545] [cave_explorer_node]: [EXPLORING] exploring: coverage: 121 m2 unseen, 6.6 m away (32% seen)
+[cave_explorer-1] [INFO] [1791456075.711558492] [cave_explorer_node]: navigation request 8: CANCELED (superseded by request 9)
+[cave_explorer-1] [INFO] [1791456087.699216965] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456087.699649465] [cave_explorer_node]: navigation request 10: sent goal (9.33, 4.43) in map
+[cave_explorer-1] [INFO] [1791456087.699810998] [cave_explorer_node]: [EXPLORING] exploring: frontier 2.4 m long, 3.6 m away
+[cave_explorer-1] [INFO] [1791456087.701298463] [cave_explorer_node]: navigation request 9: CANCELED (superseded by request 10)
+[cave_explorer-1] [INFO] [1791456096.098001323] [cave_explorer_node]: exploration goal (9.325134376013498, 4.431331745049731): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791456096.101487342] [cave_explorer_node]: navigation request 11: sent goal (13.53, 2.93) in map
+[cave_explorer-1] [INFO] [1791456096.101623296] [cave_explorer_node]: [EXPLORING] exploring: coverage: 121 m2 unseen, 6.6 m away (31% seen)
+[cave_explorer-1] [INFO] [1791456096.110801806] [cave_explorer_node]: navigation request 10: CANCELED (superseded by request 11)
+[cave_explorer-1] [INFO] [1791456116.497920748] [cave_explorer_node]: exploration goal (13.525134542906503, 2.9313316854450866): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791456116.499938487] [cave_explorer_node]: navigation request 12: sent goal (14.73, 4.43) in map
+[cave_explorer-1] [INFO] [1791456116.500082697] [cave_explorer_node]: [EXPLORING] exploring: frontier 19.2 m long, 9.0 m away
+[cave_explorer-1] [INFO] [1791456116.501529437] [cave_explorer_node]: navigation request 11: CANCELED (superseded by request 12)
+[cave_explorer-1] [INFO] [1791456136.898965111] [cave_explorer_node]: exploration goal (14.72513459059022, 4.431331745049731): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791456136.900786973] [cave_explorer_node]: navigation request 13: sent goal (25.53, 2.63) in map
+[cave_explorer-1] [INFO] [1791456136.900919972] [cave_explorer_node]: [EXPLORING] exploring: frontier 12.9 m long, 19.2 m away
+[cave_explorer-1] [INFO] [1791456136.911623018] [cave_explorer_node]: navigation request 12: CANCELED (superseded by request 13)
+[cave_explorer-1] [WARN] [1791456142.590920960] [cave_explorer_node]: navigation request 13: ABORTED (aborted by navigate_to_pose)
+[cave_explorer-1] [INFO] [1791456142.700943307] [cave_explorer_node]: navigation request 14: sent goal (13.53, 1.43) in map
+[cave_explorer-1] [INFO] [1791456142.701152258] [cave_explorer_node]: [EXPLORING] exploring: coverage: 121 m2 unseen, 7.8 m away (32% seen)
+[cave_explorer-1] [INFO] [1791456146.699590717] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456146.699982210] [cave_explorer_node]: navigation request 15: sent goal (24.93, 7.43) in map
+[cave_explorer-1] [INFO] [1791456146.700118876] [cave_explorer_node]: [EXPLORING] exploring: frontier 2.1 m long, 22.2 m away
+[cave_explorer-1] [INFO] [1791456146.701801828] [cave_explorer_node]: navigation request 14: CANCELED (superseded by request 15)
+[cave_explorer-1] [INFO] [1791456163.098438480] [cave_explorer_node]: exploration goal (24.925134995901804, 7.431331864259021): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791456163.102520085] [cave_explorer_node]: navigation request 16: sent goal (13.53, 1.43) in map
+[cave_explorer-1] [INFO] [1791456163.102670336] [cave_explorer_node]: [EXPLORING] exploring: coverage: 122 m2 unseen, 7.8 m away (31% seen)
+[cave_explorer-1] [INFO] [1791456163.112109145] [cave_explorer_node]: navigation request 15: CANCELED (superseded by request 16)
+[cave_explorer-1] [INFO] [1791456167.099400138] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456167.099785249] [cave_explorer_node]: navigation request 17: sent goal (27.33, 8.33) in map
+[cave_explorer-1] [INFO] [1791456167.099913129] [cave_explorer_node]: [EXPLORING] exploring: frontier 5.1 m long, 25.5 m away
+[cave_explorer-1] [INFO] [1791456167.101814300] [cave_explorer_node]: navigation request 16: CANCELED (superseded by request 17)
+[cave_explorer-1] [INFO] [1791456183.498103810] [cave_explorer_node]: exploration goal (27.325135091269235, 8.331331900021809): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791456183.501659981] [cave_explorer_node]: navigation request 18: sent goal (13.53, 1.43) in map
+[cave_explorer-1] [INFO] [1791456183.501803420] [cave_explorer_node]: [EXPLORING] exploring: coverage: 122 m2 unseen, 7.8 m away (32% seen)
+[cave_explorer-1] [INFO] [1791456183.511814691] [cave_explorer_node]: navigation request 17: CANCELED (superseded by request 18)
+[cave_explorer-1] [INFO] [1791456187.498866610] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456187.499268423] [cave_explorer_node]: navigation request 19: sent goal (9.33, 4.43) in map
+[cave_explorer-1] [INFO] [1791456187.499403396] [cave_explorer_node]: [EXPLORING] exploring: frontier 2.4 m long, 3.6 m away
+[cave_explorer-1] [INFO] [1791456187.501827266] [cave_explorer_node]: navigation request 18: CANCELED (superseded by request 19)
+[cave_explorer-1] [INFO] [1791456207.501510756] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456207.501931103] [cave_explorer_node]: navigation request 20: sent goal (14.73, 4.13) in map
+[cave_explorer-1] [INFO] [1791456207.502068451] [cave_explorer_node]: [EXPLORING] exploring: coverage: 113 m2 unseen, 5.1 m away (37% seen)
+[cave_explorer-1] [INFO] [1791456207.512258999] [cave_explorer_node]: navigation request 19: CANCELED (superseded by request 20)
+[cave_explorer-1] [INFO] [1791456215.499078634] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456215.499464877] [cave_explorer_node]: navigation request 21: sent goal (23.73, 6.53) in map
+[cave_explorer-1] [INFO] [1791456215.499595642] [cave_explorer_node]: [EXPLORING] exploring: frontier 2.7 m long, 15.0 m away
+[cave_explorer-1] [INFO] [1791456215.502225128] [cave_explorer_node]: navigation request 20: CANCELED (superseded by request 21)
+[cave_explorer-1] [INFO] [1791456227.501299492] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456227.501716403] [cave_explorer_node]: navigation request 22: sent goal (28.23, 17.63) in map
+[cave_explorer-1] [INFO] [1791456227.501861234] [cave_explorer_node]: [EXPLORING] exploring: frontier 54.0 m long, 16.2 m away
+[cave_explorer-1] [INFO] [1791456227.504009609] [cave_explorer_node]: navigation request 21: CANCELED (superseded by request 22)
+[cave_explorer-1] [INFO] [1791456241.672281522] [cave_explorer_node]: navigation request 22: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456241.702757330] [cave_explorer_node]: navigation request 23: sent goal (33.93, 18.22) in map
+[cave_explorer-1] [INFO] [1791456241.702918121] [cave_explorer_node]: [EXPLORING] exploring: frontier 11.4 m long, 6.9 m away
+[cave_explorer-1] [INFO] [1791456249.564394283] [cave_explorer_node]: navigation request 23: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456249.703424311] [cave_explorer_node]: navigation request 24: sent goal (26.73, 21.52) in map
+[cave_explorer-1] [INFO] [1791456249.703591675] [cave_explorer_node]: [EXPLORING] exploring: frontier 41.1 m long, 9.0 m away
+[cave_explorer-1] [INFO] [1791456261.564307477] [cave_explorer_node]: navigation request 24: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456261.704362709] [cave_explorer_node]: navigation request 25: sent goal (38.43, 25.42) in map
+[cave_explorer-1] [INFO] [1791456261.704526215] [cave_explorer_node]: [EXPLORING] exploring: frontier 188.7 m long, 14.4 m away
+[cave_explorer-1] [INFO] [1791456273.704684281] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456273.705447170] [cave_explorer_node]: navigation request 26: sent goal (44.73, 33.23) in map
+[cave_explorer-1] [INFO] [1791456273.705583285] [cave_explorer_node]: [EXPLORING] exploring: frontier 62.1 m long, 17.4 m away
+[cave_explorer-1] [INFO] [1791456273.715506765] [cave_explorer_node]: navigation request 25: CANCELED (superseded by request 26)
+[cave_explorer-1] [INFO] [1791456280.697897146] [cave_explorer_node]: artefact 4 (white_sphere) added to inspect
+[cave_explorer-1] [INFO] [1791456280.698084076] [cave_explorer_node]: inspecting artefact 4 (white_sphere), attempt 1
+[cave_explorer-1] [INFO] [1791456280.699595708] [cave_explorer_node]: navigation request 27: sent goal (46.29, 33.58) in map
+[cave_explorer-1] [INFO] [1791456280.699728657] [cave_explorer_node]: [INSPECTING] inspecting artefact 4 (white_sphere), attempt 1
+[cave_explorer-1] [INFO] [1791456280.705853521] [cave_explorer_node]: navigation request 26: CANCELED (superseded by request 27)
+[cave_explorer-1] [INFO] [1791456290.365077810] [cave_explorer_node]: navigation request 27: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456292.297518852] [cave_explorer_node]: artefact 4 inspected (conditions held for 2.00 s at 2.01 m)
+[cave_explorer-1] [INFO] [1791456292.304781618] [cave_explorer_node]: navigation request 28: sent goal (48.63, 38.03) in map
+[cave_explorer-1] [INFO] [1791456292.304938552] [cave_explorer_node]: [EXPLORING] exploring: frontier 17.4 m long, 7.8 m away
+[cave_explorer-1] [INFO] [1791456296.304235428] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456296.304656507] [cave_explorer_node]: navigation request 29: sent goal (48.63, 41.33) in map
+[cave_explorer-1] [INFO] [1791456296.304791630] [cave_explorer_node]: [EXPLORING] exploring: frontier 6.6 m long, 6.9 m away
+[cave_explorer-1] [INFO] [1791456296.306989828] [cave_explorer_node]: navigation request 28: CANCELED (superseded by request 29)
+[cave_explorer-1] [INFO] [1791456306.975938350] [cave_explorer_node]: navigation request 29: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456307.104438440] [cave_explorer_node]: navigation request 30: sent goal (43.53, 41.03) in map
+[cave_explorer-1] [INFO] [1791456307.104598860] [cave_explorer_node]: [EXPLORING] exploring: frontier 5.4 m long, 6.3 m away
+[cave_explorer-1] [INFO] [1791456315.104176310] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456315.104698408] [cave_explorer_node]: navigation request 31: sent goal (41.43, 11.33) in map
+[cave_explorer-1] [INFO] [1791456315.104833000] [cave_explorer_node]: [EXPLORING] exploring: frontier 15.6 m long, 42.6 m away
+[cave_explorer-1] [INFO] [1791456315.107414005] [cave_explorer_node]: navigation request 30: CANCELED (superseded by request 31)
+[cave_explorer-1] [INFO] [1791456315.366235141] [cave_explorer_node]: navigation request 31: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456315.497954775] [cave_explorer_node]: exploration goal (41.42642142666293, 11.330966939190201): success reported away from the goal; ignoring it
+[cave_explorer-1] [INFO] [1791456315.505325143] [cave_explorer_node]: navigation request 32: sent goal (41.43, 11.33) in map
+[cave_explorer-1] [INFO] [1791456355.497082495] [cave_explorer_node]: Detection not localised: white_sphere: 0/374 valid depth pixels (outside 0.4-10 m or missing)
+[cave_explorer-1] [INFO] [1791456358.566905011] [cave_explorer_node]: navigation request 32: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456358.705536245] [cave_explorer_node]: navigation request 33: sent goal (42.93, 5.03) in map
+[cave_explorer-1] [INFO] [1791456358.705690294] [cave_explorer_node]: [EXPLORING] exploring: frontier 34.8 m long, 8.4 m away
+[cave_explorer-1] [INFO] [1791456370.097607904] [cave_explorer_node]: artefact 5 (white_sphere) added to inspect
+[cave_explorer-1] [INFO] [1791456370.097778464] [cave_explorer_node]: inspecting artefact 5 (white_sphere), attempt 1
+[cave_explorer-1] [INFO] [1791456370.099153089] [cave_explorer_node]: navigation request 34: sent goal (50.29, 4.24) in map
+[cave_explorer-1] [INFO] [1791456370.099287922] [cave_explorer_node]: [INSPECTING] inspecting artefact 5 (white_sphere), attempt 1
+[cave_explorer-1] [INFO] [1791456370.106693005] [cave_explorer_node]: navigation request 33: CANCELED (superseded by request 34)
+[cave_explorer-1] [INFO] [1791456381.367615827] [cave_explorer_node]: navigation request 34: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456382.497392275] [cave_explorer_node]: artefact 5 inspected (conditions held for 2.00 s at 2.00 m)
+[cave_explorer-1] [INFO] [1791456382.504641487] [cave_explorer_node]: navigation request 35: sent goal (12.63, 21.23) in map
+[cave_explorer-1] [INFO] [1791456382.504795275] [cave_explorer_node]: [EXPLORING] exploring: frontier 6.6 m long, 55.2 m away
+[cave_explorer-1] [INFO] [1791456438.504457567] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456438.504914243] [cave_explorer_node]: navigation request 36: sent goal (9.63, 34.35) in map
+[cave_explorer-1] [INFO] [1791456438.505060116] [cave_explorer_node]: [EXPLORING] exploring: frontier 4.8 m long, 15.3 m away
+[cave_explorer-1] [INFO] [1791456438.507142448] [cave_explorer_node]: navigation request 35: CANCELED (superseded by request 36)
+[cave_explorer-1] [INFO] [1791456456.965452330] [cave_explorer_node]: navigation request 36: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456457.105164154] [cave_explorer_node]: navigation request 37: sent goal (15.03, 34.35) in map
+[cave_explorer-1] [INFO] [1791456457.105331358] [cave_explorer_node]: [EXPLORING] exploring: frontier 69.6 m long, 7.2 m away
+[cave_explorer-1] [INFO] [1791456461.105213264] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456461.105741814] [cave_explorer_node]: navigation request 38: sent goal (18.63, 34.65) in map
+[cave_explorer-1] [INFO] [1791456461.105874513] [cave_explorer_node]: [EXPLORING] exploring: frontier 1.5 m long, 8.1 m away
+[cave_explorer-1] [INFO] [1791456461.117102481] [cave_explorer_node]: navigation request 37: CANCELED (superseded by request 38)
+[cave_explorer-1] [INFO] [1791456465.106123384] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456465.106576843] [cave_explorer_node]: navigation request 39: sent goal (21.33, 36.15) in map
+[cave_explorer-1] [INFO] [1791456465.106716956] [cave_explorer_node]: [EXPLORING] exploring: frontier 2.4 m long, 6.9 m away
+[cave_explorer-1] [INFO] [1791456465.116908742] [cave_explorer_node]: navigation request 38: CANCELED (superseded by request 39)
+[cave_explorer-1] [INFO] [1791456465.698454365] [cave_explorer_node]: artefact 7 (green_crystals) added to inspect
+[cave_explorer-1] [INFO] [1791456465.698627860] [cave_explorer_node]: inspecting artefact 7 (green_crystals), attempt 1
+[cave_explorer-1] [INFO] [1791456465.700100119] [cave_explorer_node]: navigation request 40: sent goal (18.84, 35.25) in map
+[cave_explorer-1] [INFO] [1791456465.700233970] [cave_explorer_node]: [INSPECTING] inspecting artefact 7 (green_crystals), attempt 1
+[cave_explorer-1] [INFO] [1791456465.706594657] [cave_explorer_node]: navigation request 39: CANCELED (superseded by request 40)
+[cave_explorer-1] [INFO] [1791456469.166714042] [cave_explorer_node]: navigation request 40: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456471.097776519] [cave_explorer_node]: artefact 7 inspected (conditions held for 2.00 s at 1.91 m)
+[cave_explorer-1] [INFO] [1791456471.105689505] [cave_explorer_node]: navigation request 41: sent goal (21.63, 36.15) in map
+[cave_explorer-1] [INFO] [1791456471.105845919] [cave_explorer_node]: [EXPLORING] exploring: frontier 2.1 m long, 4.5 m away
+[cave_explorer-1] [INFO] [1791456475.106013992] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456475.106748960] [cave_explorer_node]: navigation request 42: sent goal (-2.07, 38.55) in map
+[cave_explorer-1] [INFO] [1791456475.106951008] [cave_explorer_node]: [EXPLORING] exploring: frontier 2.7 m long, 23.7 m away
+[cave_explorer-1] [INFO] [1791456475.116979458] [cave_explorer_node]: navigation request 41: CANCELED (superseded by request 42)
+[cave_explorer-1] [INFO] [1791456494.900133602] [cave_explorer_node]: exploration goal (-2.074863116929931, 38.54746452745579): no progress for 20 s; giving it up
+[cave_explorer-1] [INFO] [1791456494.917815032] [cave_explorer_node]: navigation request 43: sent goal (3.63, 36.75) in map
+[cave_explorer-1] [INFO] [1791456494.917976635] [cave_explorer_node]: [EXPLORING] exploring: coverage: 104 m2 unseen, 15.9 m away (74% seen)
+[cave_explorer-1] [INFO] [1791456494.926857616] [cave_explorer_node]: navigation request 42: CANCELED (superseded by request 43)
+[cave_explorer-1] [INFO] [1791456526.916672741] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456526.917315425] [cave_explorer_node]: navigation request 44: sent goal (-1.48, 36.14) in map
+[cave_explorer-1] [INFO] [1791456526.917458553] [cave_explorer_node]: [EXPLORING] exploring: coverage: 46 m2 unseen, 7.2 m away (77% seen)
+[cave_explorer-1] [INFO] [1791456526.931798213] [cave_explorer_node]: navigation request 43: CANCELED (superseded by request 44)
+[cave_explorer-1] [INFO] [1791456530.922692188] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456530.923251937] [cave_explorer_node]: navigation request 45: sent goal (2.12, 31.04) in map
+[cave_explorer-1] [INFO] [1791456530.923387702] [cave_explorer_node]: [EXPLORING] exploring: coverage: 31 m2 unseen, 5.7 m away (78% seen)
+[cave_explorer-1] [INFO] [1791456530.931666695] [cave_explorer_node]: navigation request 44: CANCELED (superseded by request 45)
+[cave_explorer-1] [INFO] [1791456534.923975725] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456534.924582391] [cave_explorer_node]: navigation request 46: sent goal (-2.08, 38.24) in map
+[cave_explorer-1] [INFO] [1791456534.924719669] [cave_explorer_node]: [EXPLORING] exploring: coverage: 12 m2 unseen, 7.5 m away (80% seen)
+[cave_explorer-1] [INFO] [1791456534.931706961] [cave_explorer_node]: navigation request 45: CANCELED (superseded by request 46)
+[cave_explorer-1] [INFO] [1791456546.916786343] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456546.917360368] [cave_explorer_node]: navigation request 47: sent goal (6.32, 23.24) in map
+[cave_explorer-1] [INFO] [1791456546.917499379] [cave_explorer_node]: [EXPLORING] exploring: coverage: 137 m2 unseen, 23.4 m away (80% seen)
+[cave_explorer-1] [INFO] [1791456546.927037752] [cave_explorer_node]: navigation request 46: CANCELED (superseded by request 47)
+[cave_explorer-1] [INFO] [1791456573.406605184] [cave_explorer_node]: navigation request 47: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456573.516078770] [cave_explorer_node]: navigation request 48: sent goal (4.52, 22.63) in map
+[cave_explorer-1] [INFO] [1791456573.516238951] [cave_explorer_node]: [EXPLORING] exploring: coverage: 109 m2 unseen, 3.6 m away (82% seen)
+[cave_explorer-1] [INFO] [1791456577.514955039] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456577.515640003] [cave_explorer_node]: navigation request 49: sent goal (5.12, 16.03) in map
+[cave_explorer-1] [INFO] [1791456577.515834888] [cave_explorer_node]: [EXPLORING] exploring: coverage: 85 m2 unseen, 6.3 m away (84% seen)
+[cave_explorer-1] [INFO] [1791456577.527630331] [cave_explorer_node]: navigation request 48: CANCELED (superseded by request 49)
+[cave_explorer-1] [INFO] [1791456581.515364773] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456581.515966049] [cave_explorer_node]: navigation request 50: sent goal (9.32, 16.63) in map
+[cave_explorer-1] [INFO] [1791456581.516110520] [cave_explorer_node]: [EXPLORING] exploring: coverage: 53 m2 unseen, 7.5 m away (85% seen)
+[cave_explorer-1] [INFO] [1791456581.528062907] [cave_explorer_node]: navigation request 49: CANCELED (superseded by request 50)
+[cave_explorer-1] [INFO] [1791456585.517594147] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456585.518317442] [cave_explorer_node]: navigation request 51: sent goal (9.32, 11.53) in map
+[cave_explorer-1] [INFO] [1791456585.518469607] [cave_explorer_node]: [EXPLORING] exploring: coverage: 34 m2 unseen, 8.4 m away (86% seen)
+[cave_explorer-1] [INFO] [1791456585.530903466] [cave_explorer_node]: navigation request 50: CANCELED (superseded by request 51)
+[cave_explorer-1] [INFO] [1791456589.514898833] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456589.515480733] [cave_explorer_node]: navigation request 52: sent goal (14.42, 13.03) in map
+[cave_explorer-1] [INFO] [1791456589.515619253] [cave_explorer_node]: [EXPLORING] exploring: coverage: 19 m2 unseen, 7.8 m away (87% seen)
+[cave_explorer-1] [INFO] [1791456589.527357429] [cave_explorer_node]: navigation request 51: CANCELED (superseded by request 52)
+[cave_explorer-1] [INFO] [1791456593.515210324] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456593.515941985] [cave_explorer_node]: navigation request 53: sent goal (17.12, 11.53) in map
+[cave_explorer-1] [INFO] [1791456593.516146909] [cave_explorer_node]: [EXPLORING] exploring: coverage: 3 m2 unseen, 7.8 m away (88% seen)
+[cave_explorer-1] [INFO] [1791456593.528481913] [cave_explorer_node]: navigation request 52: CANCELED (superseded by request 53)
+[cave_explorer-1] [INFO] [1791456597.518963454] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456597.519539233] [cave_explorer_node]: navigation request 54: sent goal (20.42, 0.13) in map
+[cave_explorer-1] [INFO] [1791456597.519688323] [cave_explorer_node]: [EXPLORING] exploring: coverage: 96 m2 unseen, 18.0 m away (88% seen)
+[cave_explorer-1] [INFO] [1791456597.527754748] [cave_explorer_node]: navigation request 53: CANCELED (superseded by request 54)
+[cave_explorer-1] [INFO] [1791456609.514700861] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456609.515253677] [cave_explorer_node]: navigation request 55: sent goal (24.62, 1.63) in map
+[cave_explorer-1] [INFO] [1791456609.515392196] [cave_explorer_node]: [EXPLORING] exploring: coverage: 86 m2 unseen, 7.5 m away (89% seen)
+[cave_explorer-1] [INFO] [1791456609.520813275] [cave_explorer_node]: navigation request 54: CANCELED (superseded by request 55)
+[cave_explorer-1] [INFO] [1791456616.576805424] [cave_explorer_node]: navigation request 55: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456616.713376785] [cave_explorer_node]: navigation request 56: sent goal (30.32, 1.34) in map
+[cave_explorer-1] [INFO] [1791456616.713539069] [cave_explorer_node]: [EXPLORING] exploring: coverage: 52 m2 unseen, 6.6 m away (91% seen)
+[cave_explorer-1] [INFO] [1791456620.714318131] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456620.714859465] [cave_explorer_node]: navigation request 57: sent goal (33.62, 1.64) in map
+[cave_explorer-1] [INFO] [1791456620.714993537] [cave_explorer_node]: [EXPLORING] exploring: coverage: 35 m2 unseen, 7.5 m away (92% seen)
+[cave_explorer-1] [INFO] [1791456620.724894510] [cave_explorer_node]: navigation request 56: CANCELED (superseded by request 57)
+[cave_explorer-1] [INFO] [1791456624.714095465] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456624.714733942] [cave_explorer_node]: navigation request 58: sent goal (30.02, 5.84) in map
+[cave_explorer-1] [INFO] [1791456624.714870037] [cave_explorer_node]: [EXPLORING] exploring: coverage: 22 m2 unseen, 5.1 m away (92% seen)
+[cave_explorer-1] [INFO] [1791456624.724825272] [cave_explorer_node]: navigation request 57: CANCELED (superseded by request 58)
+[cave_explorer-1] [INFO] [1791456628.713063111] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456628.713659549] [cave_explorer_node]: navigation request 59: sent goal (33.92, 7.64) in map
+[cave_explorer-1] [INFO] [1791456628.713847561] [cave_explorer_node]: [EXPLORING] exploring: coverage: 5 m2 unseen, 6.6 m away (94% seen)
+[cave_explorer-1] [INFO] [1791456628.724050030] [cave_explorer_node]: navigation request 58: CANCELED (superseded by request 59)
+[cave_explorer-1] [INFO] [1791456632.713292651] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456632.713791516] [cave_explorer_node]: navigation request 60: sent goal (36.92, 7.64) in map
+[cave_explorer-1] [INFO] [1791456632.713923253] [cave_explorer_node]: [EXPLORING] exploring: coverage: 3 m2 unseen, 5.7 m away (94% seen)
+[cave_explorer-1] [INFO] [1791456632.724225598] [cave_explorer_node]: navigation request 59: CANCELED (superseded by request 60)
+[cave_explorer-1] [INFO] [1791456644.713494360] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456644.714011379] [cave_explorer_node]: navigation request 61: sent goal (1.52, 1.64) in map
+[cave_explorer-1] [INFO] [1791456644.714151441] [cave_explorer_node]: [EXPLORING] exploring: coverage: 29 m2 unseen, 37.2 m away (94% seen)
+[cave_explorer-1] [INFO] [1791456644.724054028] [cave_explorer_node]: navigation request 60: CANCELED (superseded by request 61)
+[cave_explorer-1] [INFO] [1791456684.714256529] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456684.714792032] [cave_explorer_node]: navigation request 62: sent goal (-1.17, 0.15) in map
+[cave_explorer-1] [INFO] [1791456684.714930121] [cave_explorer_node]: [EXPLORING] exploring: coverage: 21 m2 unseen, 6.6 m away (94% seen)
+[cave_explorer-1] [INFO] [1791456684.725387829] [cave_explorer_node]: navigation request 61: CANCELED (superseded by request 62)
+[cave_explorer-1] [INFO] [1791456688.713237629] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456688.713767943] [cave_explorer_node]: navigation request 63: sent goal (-4.17, 0.15) in map
+[cave_explorer-1] [INFO] [1791456688.713903337] [cave_explorer_node]: [EXPLORING] exploring: coverage: 7 m2 unseen, 6.3 m away (95% seen)
+[cave_explorer-1] [INFO] [1791456688.724023301] [cave_explorer_node]: navigation request 62: CANCELED (superseded by request 63)
+[cave_explorer-1] [INFO] [1791456692.712720406] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456692.713241733] [cave_explorer_node]: navigation request 64: sent goal (-1.20, 17.25) in map
+[cave_explorer-1] [INFO] [1791456692.713381275] [cave_explorer_node]: [EXPLORING] exploring: coverage: 6 m2 unseen, 48.9 m away (95% seen)
+[cave_explorer-1] [INFO] [1791456692.716691508] [cave_explorer_node]: navigation request 63: CANCELED (superseded by request 64)
+[cave_explorer-1] [INFO] [1791456728.382851311] [cave_explorer_node]: Detection not localised: white_sphere: 0/374 valid depth pixels (outside 0.4-10 m or missing)
+[cave_explorer-1] [INFO] [1791456735.097949449] [cave_explorer_node]: artefact 10 (white_sphere) added to inspect
+[cave_explorer-1] [INFO] [1791456735.098116672] [cave_explorer_node]: inspecting artefact 10 (white_sphere), attempt 1
+[cave_explorer-1] [INFO] [1791456735.099489264] [cave_explorer_node]: navigation request 65: sent goal (3.64, 21.58) in map
+[cave_explorer-1] [INFO] [1791456735.099628034] [cave_explorer_node]: [INSPECTING] inspecting artefact 10 (white_sphere), attempt 1
+[cave_explorer-1] [INFO] [1791456735.104842867] [cave_explorer_node]: navigation request 64: CANCELED (superseded by request 65)
+[cave_explorer-1] [INFO] [1791456737.098489425] [cave_explorer_node]: artefact 11 (green_crystals) added to inspect
+[cave_explorer-1] [INFO] [1791456743.974941452] [cave_explorer_node]: navigation request 65: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456745.900131177] [cave_explorer_node]: artefact 10 inspected (conditions held for 2.00 s at 2.18 m)
+[cave_explorer-1] [INFO] [1791456745.900291838] [cave_explorer_node]: inspecting artefact 11 (green_crystals), attempt 1
+[cave_explorer-1] [INFO] [1791456745.901836262] [cave_explorer_node]: navigation request 66: sent goal (-2.08, 19.60) in map
+[cave_explorer-1] [INFO] [1791456745.901971987] [cave_explorer_node]: [INSPECTING] inspecting artefact 11 (green_crystals), attempt 1
+[cave_explorer-1] [INFO] [1791456755.763568755] [cave_explorer_node]: navigation request 66: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456764.498070855] [cave_explorer_node]: artefact 11 attempt 1 failed (artefact lost: not seen for 15.2 s at 1.88 m); retrying
+[cave_explorer-1] [INFO] [1791456764.498241786] [cave_explorer_node]: [INSPECTING] inspecting artefact 11, attempt 2
+[cave_explorer-1] [INFO] [1791456764.699639666] [cave_explorer_node]: navigation request 67: sent goal (-1.36, 19.80) in map
+[cave_explorer-1] [INFO] [1791456764.761580687] [cave_explorer_node]: navigation request 67: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456765.098276814] [cave_explorer_node]: artefact 11 deferred after 2 attempts (artefact lost: not seen for 15.8 s at 1.88 m)
+[cave_explorer-1] [INFO] [1791456765.114579225] [cave_explorer_node]: navigation request 68: sent goal (16.72, 27.60) in map
+[cave_explorer-1] [INFO] [1791456765.114743954] [cave_explorer_node]: [EXPLORING] exploring: coverage: 5 m2 unseen, 25.8 m away (92% seen)
+[cave_explorer-1] [INFO] [1791456789.113162306] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456789.113610656] [cave_explorer_node]: navigation request 69: sent goal (25.12, 26.40) in map
+[cave_explorer-1] [INFO] [1791456789.113749346] [cave_explorer_node]: [EXPLORING] exploring: coverage: 3 m2 unseen, 9.6 m away (93% seen)
+[cave_explorer-1] [INFO] [1791456789.117883514] [cave_explorer_node]: navigation request 68: CANCELED (superseded by request 69)
+[cave_explorer-1] [INFO] [1791456800.775903762] [cave_explorer_node]: navigation request 69: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456800.916239333] [cave_explorer_node]: navigation request 70: sent goal (31.72, 26.70) in map
+[cave_explorer-1] [INFO] [1791456800.916404934] [cave_explorer_node]: [EXPLORING] exploring: coverage: 75 m2 unseen, 8.4 m away (93% seen)
+[cave_explorer-1] [INFO] [1791456808.915238108] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456808.915787368] [cave_explorer_node]: navigation request 71: sent goal (32.62, 31.20) in map
+[cave_explorer-1] [INFO] [1791456808.915957146] [cave_explorer_node]: [EXPLORING] exploring: coverage: 72 m2 unseen, 7.5 m away (93% seen)
+[cave_explorer-1] [INFO] [1791456808.920242908] [cave_explorer_node]: navigation request 70: CANCELED (superseded by request 71)
+[cave_explorer-1] [INFO] [1791456812.916501963] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456812.916958909] [cave_explorer_node]: navigation request 72: sent goal (32.62, 34.80) in map
+[cave_explorer-1] [INFO] [1791456812.917105895] [cave_explorer_node]: [EXPLORING] exploring: coverage: 71 m2 unseen, 6.6 m away (93% seen)
+[cave_explorer-1] [INFO] [1791456812.928439224] [cave_explorer_node]: navigation request 71: CANCELED (superseded by request 72)
+[cave_explorer-1] [INFO] [1791456816.915781511] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456816.916181511] [cave_explorer_node]: navigation request 73: sent goal (32.62, 38.10) in map
+[cave_explorer-1] [INFO] [1791456816.916321413] [cave_explorer_node]: [EXPLORING] exploring: coverage: 69 m2 unseen, 7.2 m away (93% seen)
+[cave_explorer-1] [INFO] [1791456816.920538967] [cave_explorer_node]: navigation request 72: CANCELED (superseded by request 73)
+[cave_explorer-1] [INFO] [1791456820.915737331] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456820.916279206] [cave_explorer_node]: navigation request 74: sent goal (33.82, 41.40) in map
+[cave_explorer-1] [INFO] [1791456820.916458713] [cave_explorer_node]: [EXPLORING] exploring: coverage: 65 m2 unseen, 6.6 m away (93% seen)
+[cave_explorer-1] [INFO] [1791456820.920689422] [cave_explorer_node]: navigation request 73: CANCELED (superseded by request 74)
+[cave_explorer-1] [INFO] [1791456824.917937349] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456824.918486348] [cave_explorer_node]: navigation request 75: sent goal (33.52, 44.70) in map
+[cave_explorer-1] [INFO] [1791456824.918624387] [cave_explorer_node]: [EXPLORING] exploring: coverage: 50 m2 unseen, 6.3 m away (94% seen)
+[cave_explorer-1] [INFO] [1791456824.928022019] [cave_explorer_node]: navigation request 74: CANCELED (superseded by request 75)
+[cave_explorer-1] [INFO] [1791456828.915698501] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456828.916209990] [cave_explorer_node]: navigation request 76: sent goal (36.82, 47.40) in map
+[cave_explorer-1] [INFO] [1791456828.916369499] [cave_explorer_node]: [EXPLORING] exploring: coverage: 35 m2 unseen, 8.7 m away (95% seen)
+[cave_explorer-1] [INFO] [1791456828.920297841] [cave_explorer_node]: navigation request 75: CANCELED (superseded by request 76)
+[cave_explorer-1] [INFO] [1791456832.917768872] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456832.918363256] [cave_explorer_node]: navigation request 77: sent goal (41.02, 47.40) in map
+[cave_explorer-1] [INFO] [1791456832.918528997] [cave_explorer_node]: [EXPLORING] exploring: coverage: 30 m2 unseen, 8.4 m away (95% seen)
+[cave_explorer-1] [INFO] [1791456832.934795863] [cave_explorer_node]: navigation request 76: CANCELED (superseded by request 77)
+[cave_explorer-1] [INFO] [1791456836.915003684] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456836.915501877] [cave_explorer_node]: navigation request 78: sent goal (44.92, 47.10) in map
+[cave_explorer-1] [INFO] [1791456836.915644655] [cave_explorer_node]: [EXPLORING] exploring: coverage: 27 m2 unseen, 7.8 m away (95% seen)
+[cave_explorer-1] [INFO] [1791456836.919608514] [cave_explorer_node]: navigation request 77: CANCELED (superseded by request 78)
+[cave_explorer-1] [INFO] [1791456840.917122270] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456840.917731502] [cave_explorer_node]: navigation request 79: sent goal (47.92, 47.40) in map
+[cave_explorer-1] [INFO] [1791456840.917917300] [cave_explorer_node]: [EXPLORING] exploring: coverage: 24 m2 unseen, 7.5 m away (96% seen)
+[cave_explorer-1] [INFO] [1791456840.933906556] [cave_explorer_node]: navigation request 78: CANCELED (superseded by request 79)
+[cave_explorer-1] [INFO] [1791456844.915744717] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456844.916400707] [cave_explorer_node]: navigation request 80: sent goal (52.12, 46.50) in map
+[cave_explorer-1] [INFO] [1791456844.916554475] [cave_explorer_node]: [EXPLORING] exploring: coverage: 21 m2 unseen, 7.2 m away (96% seen)
+[cave_explorer-1] [INFO] [1791456844.929280225] [cave_explorer_node]: navigation request 79: CANCELED (superseded by request 80)
+[cave_explorer-1] [INFO] [1791456848.919818623] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456848.920492256] [cave_explorer_node]: navigation request 81: sent goal (48.22, 40.50) in map
+[cave_explorer-1] [INFO] [1791456848.920647958] [cave_explorer_node]: [EXPLORING] exploring: coverage: 5 m2 unseen, 6.0 m away (96% seen)
+[cave_explorer-1] [INFO] [1791456848.933763227] [cave_explorer_node]: navigation request 80: CANCELED (superseded by request 81)
+[cave_explorer-1] [INFO] [1791456852.915882420] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456852.916465523] [cave_explorer_node]: navigation request 82: sent goal (55.72, 43.50) in map
+[cave_explorer-1] [INFO] [1791456852.916639098] [cave_explorer_node]: [EXPLORING] exploring: coverage: 15 m2 unseen, 6.3 m away (96% seen)
+[cave_explorer-1] [INFO] [1791456852.929283104] [cave_explorer_node]: navigation request 81: CANCELED (superseded by request 82)
+[cave_explorer-1] [INFO] [1791456856.915470534] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456856.916090886] [cave_explorer_node]: navigation request 83: sent goal (55.72, 36.90) in map
+[cave_explorer-1] [INFO] [1791456856.916235227] [cave_explorer_node]: [EXPLORING] exploring: coverage: 6 m2 unseen, 9.0 m away (97% seen)
+[cave_explorer-1] [INFO] [1791456856.929273392] [cave_explorer_node]: navigation request 82: CANCELED (superseded by request 83)
+[cave_explorer-1] [INFO] [1791456860.915179416] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456860.915708908] [cave_explorer_node]: navigation request 84: sent goal (45.82, 35.10) in map
+[cave_explorer-1] [INFO] [1791456860.915851425] [cave_explorer_node]: [EXPLORING] exploring: coverage: 7 m2 unseen, 14.4 m away (97% seen)
+[cave_explorer-1] [INFO] [1791456860.929257941] [cave_explorer_node]: navigation request 83: CANCELED (superseded by request 84)
+[cave_explorer-1] [INFO] [1791456872.915710075] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456872.916399317] [cave_explorer_node]: navigation request 85: sent goal (37.72, 23.70) in map
+[cave_explorer-1] [INFO] [1791456872.916539971] [cave_explorer_node]: [EXPLORING] exploring: coverage: 3 m2 unseen, 24.0 m away (98% seen)
+[cave_explorer-1] [INFO] [1791456872.919818475] [cave_explorer_node]: navigation request 84: CANCELED (superseded by request 85)
+[cave_explorer-1] [INFO] [1791456896.578237333] [cave_explorer_node]: navigation request 85: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456896.714033576] [cave_explorer_node]: navigation request 86: sent goal (40.72, 11.39) in map
+[cave_explorer-1] [INFO] [1791456896.714200309] [cave_explorer_node]: [EXPLORING] exploring: coverage: 5 m2 unseen, 15.9 m away (98% seen)
+[cave_explorer-1] [INFO] [1791456911.774927232] [cave_explorer_node]: navigation request 86: SUCCEEDED
+[cave_explorer-1] [INFO] [1791456911.914548987] [cave_explorer_node]: navigation request 87: sent goal (42.52, 5.39) in map
+[cave_explorer-1] [INFO] [1791456911.914716641] [cave_explorer_node]: [EXPLORING] exploring: coverage: 4 m2 unseen, 7.8 m away (98% seen)
+[cave_explorer-1] [INFO] [1791456919.914370163] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456919.914819374] [cave_explorer_node]: navigation request 88: sent goal (51.52, 4.49) in map
+[cave_explorer-1] [INFO] [1791456919.914956031] [cave_explorer_node]: [EXPLORING] exploring: coverage: 3 m2 unseen, 11.4 m away (98% seen)
+[cave_explorer-1] [INFO] [1791456919.925953782] [cave_explorer_node]: navigation request 87: CANCELED (superseded by request 88)
+[cave_explorer-1] [INFO] [1791456927.914488779] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456927.914908256] [cave_explorer_node]: navigation request 89: sent goal (47.92, 14.09) in map
+[cave_explorer-1] [INFO] [1791456927.915054389] [cave_explorer_node]: [EXPLORING] exploring: coverage: 2 m2 unseen, 11.1 m away (98% seen)
+[cave_explorer-1] [INFO] [1791456927.917995502] [cave_explorer_node]: navigation request 88: CANCELED (superseded by request 89)
+[cave_explorer-1] [INFO] [1791456935.913960496] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456935.914425146] [cave_explorer_node]: navigation request 90: sent goal (21.52, 9.59) in map
+[cave_explorer-1] [INFO] [1791456935.914566020] [cave_explorer_node]: [EXPLORING] exploring: coverage: 4 m2 unseen, 31.2 m away (99% seen)
+[cave_explorer-1] [INFO] [1791456935.917503225] [cave_explorer_node]: navigation request 89: CANCELED (superseded by request 90)
+[cave_explorer-1] [INFO] [1791456939.914638094] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456939.915133533] [cave_explorer_node]: navigation request 91: sent goal (27.22, 16.49) in map
+[cave_explorer-1] [INFO] [1791456939.915273495] [cave_explorer_node]: [EXPLORING] exploring: coverage: 4 m2 unseen, 28.8 m away (99% seen)
+[cave_explorer-1] [INFO] [1791456939.926015127] [cave_explorer_node]: navigation request 90: CANCELED (superseded by request 91)
+[cave_explorer-1] [INFO] [1791456963.913832941] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456963.914277774] [cave_explorer_node]: navigation request 92: sent goal (25.72, 14.39) in map
+[cave_explorer-1] [INFO] [1791456963.914432825] [cave_explorer_node]: [EXPLORING] exploring: coverage: 2 m2 unseen, 9.0 m away (99% seen)
+[cave_explorer-1] [INFO] [1791456963.917299798] [cave_explorer_node]: navigation request 91: CANCELED (superseded by request 92)
+[cave_explorer-1] [INFO] [1791456967.915150950] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791456967.915686524] [cave_explorer_node]: navigation request 93: sent goal (8.92, 38.99) in map
+[cave_explorer-1] [INFO] [1791456967.915834511] [cave_explorer_node]: [EXPLORING] exploring: coverage: 5 m2 unseen, 42.0 m away (99% seen)
+[cave_explorer-1] [INFO] [1791456967.925259335] [cave_explorer_node]: navigation request 92: CANCELED (superseded by request 93)
+[cave_explorer-1] [INFO] [1791457002.897856102] [cave_explorer_node]: Detection not localised: ice_formation: 2360/17520 valid depth pixels (outside 0.4-10 m or missing)
+[cave_explorer-1] [INFO] [1791457011.913814965] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791457011.914311335] [cave_explorer_node]: navigation request 94: sent goal (12.82, 40.78) in map
+[cave_explorer-1] [INFO] [1791457011.914468360] [cave_explorer_node]: [EXPLORING] exploring: coverage: 4 m2 unseen, 8.7 m away (99% seen)
+[cave_explorer-1] [INFO] [1791457011.917352164] [cave_explorer_node]: navigation request 93: CANCELED (superseded by request 94)
+[cave_explorer-1] [INFO] [1791457015.913953476] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791457015.914426322] [cave_explorer_node]: navigation request 95: sent goal (-4.58, 38.98) in map
+[cave_explorer-1] [INFO] [1791457015.914570933] [cave_explorer_node]: [EXPLORING] exploring: coverage: 5 m2 unseen, 16.8 m away (99% seen)
+[cave_explorer-1] [INFO] [1791457015.917400967] [cave_explorer_node]: navigation request 94: CANCELED (superseded by request 95)
+[cave_explorer-1] [INFO] [1791457019.913475110] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791457019.914003670] [cave_explorer_node]: navigation request 96: sent goal (-2.78, 35.98) in map
+[cave_explorer-1] [INFO] [1791457019.914160985] [cave_explorer_node]: [EXPLORING] exploring: coverage: 5 m2 unseen, 13.2 m away (99% seen)
+[cave_explorer-1] [INFO] [1791457019.917195473] [cave_explorer_node]: navigation request 95: CANCELED (superseded by request 96)
+[cave_explorer-1] [INFO] [1791457031.913409891] [cave_explorer_node]: frontier being explored has been mapped; switching goal
+[cave_explorer-1] [INFO] [1791457031.913897164] [cave_explorer_node]: navigation request 97: sent goal (-4.58, 38.98) in map
+[cave_explorer-1] [INFO] [1791457031.914049921] [cave_explorer_node]: [EXPLORING] exploring: coverage: 4 m2 unseen, 7.8 m away (99% seen)
+[cave_explorer-1] [INFO] [1791457031.917029565] [cave_explorer_node]: navigation request 96: CANCELED (superseded by request 97)
+[cave_explorer-1] [INFO] [1791457042.176331155] [cave_explorer_node]: navigation request 97: SUCCEEDED
+[cave_explorer-1] [INFO] [1791457042.269310311] [cave_explorer_node]: exploration paused: camera has seen 99% of free space; 21 unseen regions left: 21 too small
+[cave_explorer-1] [INFO] [1791457042.269472034] [cave_explorer_node]: [EXHAUSTED] exploration paused: camera has seen 99% of free space; 21 unseen regions left: 21 too small
