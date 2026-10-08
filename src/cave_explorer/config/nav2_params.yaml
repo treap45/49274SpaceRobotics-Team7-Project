@@ -205,7 +205,10 @@ local_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
-        observation_sources: scan
+        # artefacts: shapes of detected artefacts from cave_explorer_node. The
+        # lidar, 1.0 m up, misses the wide bases of green_crystals and
+        # ice_formation; the robot got stuck on one for 3.5 min in simulation.
+        observation_sources: scan artefacts
         scan:
           topic: /scan
           max_obstacle_height: 2.0
@@ -216,6 +219,18 @@ local_costmap:
           raytrace_min_range: 0.0
           obstacle_max_range: 100.0 # 10.0
           obstacle_min_range: 0.0
+        artefacts:
+          topic: /artifact_obstacles
+          data_type: "PointCloud2"
+          min_obstacle_height: 0.1
+          max_obstacle_height: 2.5
+          marking: True
+          clearing: False       # the points are already filtered to artefacts
+          # The cloud is in map, so ranges are measured from the map origin.
+          obstacle_max_range: 500.0
+          obstacle_min_range: 0.0
+          raytrace_max_range: 500.0
+          raytrace_min_range: 0.0
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True
@@ -241,7 +256,10 @@ global_costmap:
       obstacle_layer:
         plugin: "nav2_costmap_2d::ObstacleLayer"
         enabled: True
-        observation_sources: scan
+        # artefacts: shapes of detected artefacts from cave_explorer_node. The
+        # lidar, 1.0 m up, misses the wide bases of green_crystals and
+        # ice_formation; the robot got stuck on one for 3.5 min in simulation.
+        observation_sources: scan artefacts
         scan:
           topic: /scan
           max_obstacle_height: 2.0
@@ -252,6 +270,18 @@ global_costmap:
           raytrace_min_range: 0.0
           obstacle_max_range: 100.0 #10.0
           obstacle_min_range: 0.0
+        artefacts:
+          topic: /artifact_obstacles
+          data_type: "PointCloud2"
+          min_obstacle_height: 0.1
+          max_obstacle_height: 2.5
+          marking: True
+          clearing: False       # the points are already filtered to artefacts
+          # The cloud is in map, so ranges are measured from the map origin.
+          obstacle_max_range: 500.0
+          obstacle_min_range: 0.0
+          raytrace_max_range: 500.0
+          raytrace_min_range: 0.0
       static_layer:
         plugin: "nav2_costmap_2d::StaticLayer"
         map_subscribe_transient_local: True

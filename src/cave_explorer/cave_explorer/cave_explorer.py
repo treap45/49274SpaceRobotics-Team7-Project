@@ -33,12 +33,15 @@ from nav_msgs.msg import OccupancyGrid
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.time import Time
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import Image, PointCloud2
+from sensor_msgs_py import point_cloud2
+from std_msgs.msg import Header
 from tf2_ros import TransformException
 from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
 
+from cave_explorer.artifact_obstacles import ArtifactObstacles
 from cave_explorer.artifact_tracker import ArtifactTracker, SIM_CAMERA_MODEL
 from cave_explorer.behaviour_manager import BehaviourConfig, BehaviourManager
 from cave_explorer.coverage_explorer import CoverageExplorer, TwoPhaseExplorer
@@ -114,6 +117,8 @@ class CaveExplorer(Node):
         # Perception (A) and localisation (B)
         self.detector_ = self._load_detector()
         self.tracker_ = ArtifactTracker()
+        # Artefact shapes for Nav2: the lidar, 1.0 m up, misses their wide bases.
+        self.obstacles_ = ArtifactObstacles()
         self.depth_images_ = deque(maxlen=10)       # (stamp_ns, depth image)
         self.pending_batch_ = None
 
@@ -136,6 +141,8 @@ class CaveExplorer(Node):
         self.marker_pub_ = self.create_publisher(MarkerArray, 'marker_array_artifacts', 10)
         self.frontier_pub_ = self.create_publisher(MarkerArray, 'frontier_markers', 1)
         self.coverage_pub_ = self.create_publisher(OccupancyGrid, 'camera_coverage', 1)
+        self.obstacle_pub_ = self.create_publisher(PointCloud2, 'artifact_obstacles', 1)
+        self.obstacle_timer_ = self.create_timer(1.0, self.publish_artifact_obstacles)
         self.ticks_ = 0
 
         self.map_sub_ = self.create_subscription(OccupancyGrid, 'map', self.map_callback, 1)
@@ -230,6 +237,7 @@ class CaveExplorer(Node):
 
         self.pending_batch_ = None
         self.tracker_.update(batch, depth, SIM_CAMERA_MODEL, transform)
+        self.obstacles_.add(batch, depth, SIM_CAMERA_MODEL, transform)
         for reason in self.tracker_.last_rejections:
             self.get_logger().info(f'Detection not localised: {reason}',
                                    throttle_duration_sec=2.0)
@@ -281,6 +289,11 @@ class CaveExplorer(Node):
             self.last_frontiers_ = self.explorer_.frontiers
             self.frontier_pub_.publish(frontier_markers(self.explorer_))
         self.publish_artifact_markers(tracks)
+
+    def publish_artifact_obstacles(self):
+        """Everything ArtifactObstacles has accumulated, for Nav2's obstacle layers."""
+        header = Header(frame_id=MAP_FRAME, stamp=self.get_clock().now().to_msg())
+        self.obstacle_pub_.publish(point_cloud2.create_cloud_xyz32(header, self.obstacles_.points()))
 
     def publish_artifact_markers(self, tracks):
         """One sphere and label per confirmed artefact, coloured by inspection state."""
