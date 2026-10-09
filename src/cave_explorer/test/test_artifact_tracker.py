@@ -12,6 +12,7 @@ from cave_explorer.interfaces import (
     Detection2D,
     DetectionBatch,
     GREEN_ALIEN,
+    ICE_FORMATION,
 )
 
 SECOND = 10**9
@@ -163,3 +164,153 @@ def test_one_large_artefact_seen_from_different_sides_stays_one_track():
         tracks = see(tracker, stamp, depth)
     assert len(tracks) == 1
     assert tracks[0].observation_count == 3
+
+
+@pytest.mark.parametrize('target_width', [4, 12, 40])
+def test_foreground_depth_wins_over_far_background(target_width):
+    tracker = ArtifactTracker(confirm_count=1)
+    depth = depth_image(8.0)
+    # Even 10% foreground defeats a wall covering the other 90%.
+    start = 360 - target_width // 2
+    depth[220:260, start:start + target_width] = 3.0
+    (track,) = tracker.update(batch(1, centred_box(ICE_FORMATION)), depth,
+                              SIM_CAMERA_MODEL, OPTICAL_IN_MAP)
+    assert track.class_name == ICE_FORMATION
+    assert track.position_map == pytest.approx((3.0, 0.0, 0.5))
+
+
+def test_off_centre_foreground_supplies_depth_and_projection_pixel():
+    tracker = ArtifactTracker(confirm_count=1)
+    depth = depth_image(8.0)
+    depth[244:256, 370:378] = 3.0
+    (track,) = tracker.update(batch(1, centred_box(ICE_FORMATION)), depth,
+                              SIM_CAMERA_MODEL, OPTICAL_IN_MAP)
+    # Selected foreground pixel centre is (374, 250), not bbox centre (360, 240).
+    assert track.position_map == pytest.approx(
+        (3.0, -14 * 3.0 / SIM_CAMERA_MODEL['fx'],
+         0.5 - 10 * 3.0 / SIM_CAMERA_MODEL['fy']))
+
+
+def test_small_near_outliers_do_not_win_over_supported_foreground():
+    tracker = ArtifactTracker(confirm_count=1)
+    depth = depth_image(8.0)
+    depth[220:260, 358:362] = 3.0
+    depth[220:222, 340:342] = 0.5
+    (track,) = tracker.update(batch(1, centred_box(ICE_FORMATION)), depth,
+                              SIM_CAMERA_MODEL, OPTICAL_IN_MAP)
+    assert track.position_map == pytest.approx((3.0, 0.0, 0.5))
+
+
+def test_noisy_foreground_band_uses_robust_depth_and_ignores_invalid_pixels():
+    tracker = ArtifactTracker(confirm_count=1)
+    depth = depth_image(8.0)
+    depth[220:260, 358:362] = np.tile([2.95, 3.0, 3.0, 3.05], (40, 1))
+    depth[230:234, 340:344] = np.nan
+    (track,) = tracker.update(batch(1, centred_box(ICE_FORMATION)), depth,
+                              SIM_CAMERA_MODEL, OPTICAL_IN_MAP)
+    assert track.position_map == pytest.approx((3.0, 0.0, 0.5))
+
+
+def test_sparse_depth_is_rejected():
+    tracker = ArtifactTracker(confirm_count=1)
+    depth = depth_image()
+    depth[240:244, 360:364] = 3.0
+    assert tracker.update(batch(1, centred_box(ICE_FORMATION)), depth,
+                          SIM_CAMERA_MODEL, OPTICAL_IN_MAP) == []
+    assert 'valid depth pixels' in tracker.last_rejections[0]
+
+
+def test_unsupported_depth_bands_are_rejected():
+    tracker = ArtifactTracker(confirm_count=1)
+    depth = depth_image()
+    # Enough valid pixels overall, but each band has fewer than 80 pixels.
+    for row in range(20):
+        depth[220 + row, 340:380] = 0.5 + row * 0.45
+    assert tracker.update(batch(1, centred_box(ICE_FORMATION)), depth,
+                          SIM_CAMERA_MODEL, OPTICAL_IN_MAP) == []
+    assert 'foreground support' in tracker.last_rejections[0]
+
+
+def test_clipped_sampling_window_uses_actual_image_pixels():
+    tracker = ArtifactTracker(confirm_count=1)
+    sample, reason = tracker._depth_in_bbox(depth_image(3.0), (-40, -40, 40, 40))
+    assert reason is None
+    assert sample == pytest.approx((3.0, 10.0, 10.0))
+
+
+def test_box_outside_depth_image_is_rejected():
+    sample, reason = ArtifactTracker()._depth_in_bbox(depth_image(3.0),
+                                                     (800, 0, 880, 80))
+    assert sample is None
+    assert 'no pixels' in reason
+
+
+def test_sparse_intermediate_depths_do_not_bridge_target_to_wall():
+    tracker = ArtifactTracker(confirm_count=1)
+    depth = depth_image(8.0)
+    depth[220:260, 358:362] = 3.0
+    # Mixed edge readings form a chain of small gaps, but are not a surface.
+    depth[220, 340:359] = np.linspace(3.25, 7.75, 19)
+    (track,) = tracker.update(batch(1, centred_box(ICE_FORMATION)), depth,
+                              SIM_CAMERA_MODEL, OPTICAL_IN_MAP)
+    assert track.position_map[0] == pytest.approx(3.0)
+
+
+@pytest.mark.parametrize('target_width', [2, 3])
+def test_small_supported_foreground_is_not_swamped_by_wall(target_width):
+    tracker = ArtifactTracker(confirm_count=1)
+    depth = depth_image(8.0)
+    depth[220:260, 368:368 + target_width] = 3.0
+    (track,) = tracker.update(batch(1, centred_box(ICE_FORMATION)), depth,
+                              SIM_CAMERA_MODEL, OPTICAL_IN_MAP)
+    u = 368 + target_width / 2
+    assert track.position_map == pytest.approx(
+        (3.0, -(u - 360) * 3.0 / SIM_CAMERA_MODEL['fx'], 0.5))
+
+
+@pytest.mark.parametrize('u, v', [(20, 20), (700, 460)])
+def test_image_boundary_box_projects_selected_pixels(u, v):
+    tracker = ArtifactTracker(confirm_count=1)
+    # Boxes lie exactly against the image boundary; selected pixels stay inside.
+    detection = centred_box(ICE_FORMATION, half=20, u=u, v=v)
+    (track,) = tracker.update(batch(1, detection), depth_image(3.0),
+                              SIM_CAMERA_MODEL, OPTICAL_IN_MAP)
+    assert track.position_map == pytest.approx(
+        (3.0, -(u - 360) * 3.0 / SIM_CAMERA_MODEL['fx'],
+         0.5 - (v - 240) * 3.0 / SIM_CAMERA_MODEL['fy']))
+
+
+def test_repeated_viewpoints_confirm_ice_in_a_distinct_map_frame():
+    tracker = ArtifactTracker()  # Production confirmation count, not one-shot.
+    target_world = (33.7, 10.6, 0.6)
+    world_from_map_translation = (12.0, -7.0, 0.0)
+    for stamp, (camera_x, camera_y) in enumerate(
+            [(28.0, 9.0), (29.0, 10.6), (28.0, 12.0)], start=1):
+        z = target_world[0] - camera_x
+        u = round(360 + SIM_CAMERA_MODEL['fx'] * (camera_y - target_world[1]) / z)
+        v = round(240 + SIM_CAMERA_MODEL['fy'] * (0.5 - target_world[2]) / z)
+        depth = depth_image(9.0)
+        depth[v - 20:v + 20, u - 20:u + 20] = z
+        optical_in_map = dict(OPTICAL_IN_MAP)
+        optical_in_map['translation'] = (
+            camera_x - world_from_map_translation[0],
+            camera_y - world_from_map_translation[1], 0.5)
+        tracks = tracker.update(batch(stamp, centred_box(ICE_FORMATION, half=160)),
+                                depth, SIM_CAMERA_MODEL, optical_in_map)
+        if stamp < 3:
+            assert tracks == []
+    (track,) = tracks
+    assert track.observation_count == 3
+    estimated_world = tuple(p + t for p, t in zip(track.position_map,
+                                                  world_from_map_translation))
+    assert estimated_world == pytest.approx(target_world, abs=0.02)
+
+
+@pytest.mark.parametrize('kwargs', [
+    {'depth_band_width_m': 0}, {'depth_band_width_m': np.nan},
+    {'depth_band_width_m': np.inf}, {'min_foreground_fraction': 0},
+    {'min_foreground_fraction': 1.1}, {'min_foreground_fraction': np.nan},
+])
+def test_invalid_foreground_configuration_is_rejected(kwargs):
+    with pytest.raises(ValueError):
+        ArtifactTracker(**kwargs)
