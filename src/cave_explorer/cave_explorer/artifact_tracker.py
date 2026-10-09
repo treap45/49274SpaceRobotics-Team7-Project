@@ -14,8 +14,9 @@ changes afterwards (Workplan 4.3). A single bad-depth observation therefore
 never reaches C.
 
 Depth (Workplan 4.3 item 2, 5.1): the depth image is the same 720 x 480 sensor
-as the RGB image, so a bbox indexes it directly. The median over the central
-half of the box keeps the object and drops most of the background around it.
+as the RGB image, so a bbox indexes it directly. Valid depths in the central
+half of the box are split into depth bands. The nearest supported band supplies
+both depth and pixel coordinates, keeping wall depth off the object ray.
 Readings outside the 0.4-10 m depth clip are invalid; a detection with too few
 valid pixels is skipped with a reason rather than placed at a clipped depth.
 
@@ -76,6 +77,8 @@ class ArtifactTracker:
         match_radius_m: float = 2.5,
         min_valid_depth_fraction: float = 0.2,
         provisional_timeout_sec: float = 60.0,
+        depth_band_width_m: float = 0.3,
+        min_foreground_fraction: float = 0.05,
     ):
         """``match_radius_m`` must stay below the spacing of same-class
         artefacts or two of them merge: mars_cave.sdf has three per class, at
@@ -84,6 +87,12 @@ class ArtifactTracker:
         their estimates up to 1.7 m apart).
         ``provisional_timeout_sec`` drops unconfirmed tracks that were never
         seen again, which is what most bad-depth observations become."""
+        if depth_band_width_m <= 0 or not math.isfinite(depth_band_width_m):
+            raise ValueError('depth_band_width_m must be finite and positive')
+        if not 0 < min_foreground_fraction <= 1:
+            raise ValueError('min_foreground_fraction must be in (0, 1]')
+        self.depth_band_width_m = depth_band_width_m
+        self.min_foreground_fraction = min_foreground_fraction
         self.confirm_count = confirm_count
         self.match_radius_m = match_radius_m
         self.min_valid_depth_fraction = min_valid_depth_fraction
@@ -133,11 +142,11 @@ class ArtifactTracker:
         depth = np.asarray(matched_depth, dtype=np.float32)
 
         for detection in detections.detections:
-            depth_m, reason = self._depth_in_bbox(depth, detection.bbox_xyxy)
-            if depth_m is None:
+            sample, reason = self._depth_in_bbox(depth, detection.bbox_xyxy)
+            if sample is None:
                 self.last_rejections.append(f'{detection.class_name}: {reason}')
                 continue
-            u, v = self._bbox_center(detection.bbox_xyxy)
+            depth_m, u, v = sample
             point_camera = self._pixel_to_camera(u, v, depth_m, camera_model)
             position_map = self._transform_point(point_camera, transform)
             self.update_observation(detection.class_name, position_map, stamp_ns)
@@ -195,9 +204,15 @@ class ArtifactTracker:
             or now_ns - track.last_seen_ns <= self.provisional_timeout_ns]
 
     def _depth_in_bbox(self, depth, bbox_xyxy):
-        """Median valid depth over the central half of the box.
+        """Nearest supported depth band in the central half of the box.
 
-        Returns ``(depth_m, None)`` or ``(None, reason)``.
+        Group sorted valid depths into bands spanning at most ``depth_band_width_m``.
+        Bounding the total span prevents sparse edge readings bridging to a wall.
+        Require at least four pixels and ``min_foreground_fraction`` of the
+        sampling window, so isolated near readings do not win over an object.
+        Return ``((depth_m, u, v), None)`` from the same band, or ``(None, reason)``.
+        A supported nearer occluder cannot be distinguished from the target
+        using depth alone; this is a foreground heuristic, not segmentation.
         """
         height, width = depth.shape[:2]
         x_min, y_min, x_max, y_max = bbox_xyxy
@@ -212,16 +227,28 @@ class ArtifactTracker:
             return None, 'bounding box has no pixels inside the depth image'
 
         window = depth[v0:v1, u0:u1]
-        valid = window[np.isfinite(window)
-                       & (window >= DEPTH_MIN_M) & (window < DEPTH_MAX_M)]
+        rows, cols = np.nonzero(np.isfinite(window)
+                                & (window >= DEPTH_MIN_M) & (window < DEPTH_MAX_M))
+        valid = window[rows, cols]
         if valid.size < self.min_valid_depth_fraction * window.size:
             return None, (f'{valid.size}/{window.size} valid depth pixels '
                           f'(outside {DEPTH_MIN_M:g}-{DEPTH_MAX_M:g} m or missing)')
-        return float(np.median(valid)), None
-
-    def _bbox_center(self, bbox_xyxy):
-        x_min, y_min, x_max, y_max = bbox_xyxy
-        return (x_min + x_max) / 2.0, (y_min + y_max) / 2.0
+        order = np.argsort(valid)
+        sorted_depths = valid[order]
+        min_support = max(4, math.ceil(self.min_foreground_fraction * window.size))
+        start = 0
+        while start < order.size:
+            end = int(np.searchsorted(sorted_depths,
+                                      sorted_depths[start] + self.depth_band_width_m,
+                                      side='right'))
+            band = order[start:end]
+            start = end
+            if band.size >= min_support:
+                # Pixel centres follow the exclusive bbox edge convention.
+                return (float(np.median(valid[band])),
+                        float(u0 + np.median(cols[band]) + 0.5),
+                        float(v0 + np.median(rows[band]) + 0.5)), None
+        return None, 'no depth band has enough foreground support'
 
     def _pixel_to_camera(self, u: float, v: float, depth_m: float, camera_model):
         """Depth pixel to a point in the camera optical frame."""
