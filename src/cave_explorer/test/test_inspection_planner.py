@@ -222,12 +222,39 @@ def test_old_close_sighting_expires():
 
 def test_lost_when_close_and_unseen_but_not_when_far():
     planner = InspectionPlanner(sighting_window_sec=15.0)
-    assert planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0), 16 * SECOND).status \
-        is InspectionEvaluation.LOST
-    assert planner.evaluate(track(last_seen_s=0), robot(-4.0, 0.0), 16 * SECOND).status \
-        is InspectionEvaluation.PENDING
-    assert planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0), 10 * SECOND).status \
+    close, far = robot(-1.2, 0.0), robot(-4.0, 0.0)
+    assert planner.evaluate(track(last_seen_s=0), close, 0).status \
         is not InspectionEvaluation.LOST
+    assert planner.evaluate(track(last_seen_s=0), close, 10 * SECOND).status \
+        is not InspectionEvaluation.LOST
+    assert planner.evaluate(track(last_seen_s=0), close, 16 * SECOND).status \
+        is InspectionEvaluation.LOST
+    assert planner.evaluate(track(last_seen_s=0), far, 30 * SECOND).status \
+        is InspectionEvaluation.PENDING
+
+
+def test_lost_clock_starts_when_the_robot_comes_within_range():
+    """An artefact last seen 30 s ago, while another was inspected, is not LOST
+    the moment the robot reaches its viewpoint."""
+    planner = InspectionPlanner(sighting_window_sec=15.0)
+    planner.evaluate(track(last_seen_s=0), robot(-8.0, 0.0), 20 * SECOND)
+    assert planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0), 30 * SECOND).status \
+        is InspectionEvaluation.PENDING
+    assert planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0), 44 * SECOND).status \
+        is InspectionEvaluation.PENDING
+    assert planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0), 46 * SECOND).status \
+        is InspectionEvaluation.LOST
+
+
+def test_new_viewpoint_restarts_the_lost_clock():
+    planner = InspectionPlanner(sighting_window_sec=15.0)
+    here = robot(-1.2, 0.0)
+    planner.evaluate(track(last_seen_s=0), here, 0)
+    assert planner.evaluate(track(last_seen_s=0), here, 16 * SECOND).status \
+        is InspectionEvaluation.LOST
+    planner.make_goal(track(), robot(-4.0, 0.0), make_map(open_room()))
+    assert planner.evaluate(track(last_seen_s=0), here, 17 * SECOND).status \
+        is InspectionEvaluation.PENDING
 
 
 def test_hold_timer_is_per_artefact():

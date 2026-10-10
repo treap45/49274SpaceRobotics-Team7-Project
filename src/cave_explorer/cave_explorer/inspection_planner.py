@@ -20,10 +20,13 @@ been within the distance and heading tolerances for ``hold_time_sec`` of ROS
 time, having seen the artefact from within ``sighting_range_m`` during the last
 ``sighting_window_sec``. It does not demand a detection at the viewpoint
 itself: in simulation the detector stopped seeing artefacts inside about 2 m,
-so that rule failed every inspection. It is LOST when the robot is at close
-range and has not seen the artefact at all for ``sighting_window_sec``. Far
-away and unseen is still PENDING: the camera usually loses the artefact while
-the robot drives round to it.
+so that rule failed every inspection. It is LOST when the robot has been at
+close range for ``sighting_window_sec`` without seeing the artefact; the time
+counts from when it came within range, or from the last sighting if later, and
+restarts with every ``make_goal``. Counted from the last sighting alone, an
+artefact queued behind another, or viewed from 3.7 m, was LOST on arrival.
+Far away and unseen is still PENDING: the camera usually loses the artefact
+while the robot drives round to it.
 """
 
 import math
@@ -90,6 +93,9 @@ class InspectionPlanner:
         # previous call, so an old far sighting is not credited as close.
         self._close_sighting = {}
         self._previous_seen = {}
+        # artifact_id -> ROS time (ns) the robot came within view range for the
+        # current viewpoint; the LOST clock runs from here.
+        self._in_range_since = {}
 
     # ------------------------------------------------------------------
     # Observation pose
@@ -100,6 +106,7 @@ class InspectionPlanner:
         if map_msg is None or robot_pose is None:
             return InspectionGoal(InspectionGoalStatus.NOT_READY, None,
                                   'no map or robot pose yet')
+        self._in_range_since.pop(track.artifact_id, None)    # new viewpoint, new chance
         grid = _Grid(map_msg)
         ax, ay = track.position_map[0], track.position_map[1]
         if not grid.contains(ax, ay):
@@ -169,11 +176,19 @@ class InspectionPlanner:
             self._close_sighting.pop(artifact_id)
 
         in_view_range = distance <= stand_off + self.distance_tolerance_m
-        if in_view_range and unseen_ns > self.sighting_window_ns:
-            self._holding_since.pop(artifact_id, None)
-            return InspectionAssessment(
-                InspectionEvaluation.LOST,
-                f'not seen for {unseen_ns / 1e9:.1f} s at {distance:.2f} m')
+        if not in_view_range:
+            self._in_range_since.pop(artifact_id, None)
+        else:
+            in_range_since = self._in_range_since.setdefault(artifact_id, now_ns)
+            if in_range_since > now_ns:     # time went backwards
+                in_range_since = self._in_range_since[artifact_id] = now_ns
+            unseen_in_range_ns = now_ns - max(track.last_seen_ns, in_range_since)
+            if unseen_in_range_ns > self.sighting_window_ns:
+                self._holding_since.pop(artifact_id, None)
+                return InspectionAssessment(
+                    InspectionEvaluation.LOST,
+                    f'not seen for {unseen_in_range_ns / 1e9:.1f} s in range, '
+                    f'{unseen_ns / 1e9:.1f} s in all, at {distance:.2f} m')
 
         distance_ok = abs(distance - stand_off) <= self.distance_tolerance_m
         heading_ok = abs(heading_error) <= self.heading_tolerance
