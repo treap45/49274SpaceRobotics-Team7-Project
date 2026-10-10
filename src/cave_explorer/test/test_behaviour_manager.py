@@ -265,7 +265,7 @@ def test_nav2_success_alone_is_not_an_inspection():
     world.step(tracks=[track()], seconds=6.0)
     record = world.record(1)
     assert record.state is InspectionState.DEFERRED
-    assert 'never satisfied' in record.last_failure_reason
+    assert 'never satisfied (scripted)' in record.last_failure_reason   # the planner's reason
 
 
 def test_satisfied_before_arriving_counts():
