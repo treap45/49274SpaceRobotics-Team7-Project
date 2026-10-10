@@ -191,6 +191,16 @@ def test_satisfied_only_after_hold_time_in_ros_time():
         is InspectionEvaluation.SATISFIED
 
 
+def test_heading_within_nav2_slack_is_accepted():
+    """35 deg off: Nav2's 28.6 deg yaw tolerance plus a stop 1 m off the viewpoint."""
+    planner = InspectionPlanner(hold_time_sec=0.0)
+    planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0, math.radians(35)), 0)
+    assert planner.evaluate(track(last_seen_s=1), robot(-1.2, 0.0, math.radians(35)),
+                            SECOND).status is InspectionEvaluation.SATISFIED
+    assert planner.evaluate(track(last_seen_s=2), robot(-1.2, 0.0, math.radians(45)),
+                            2 * SECOND).status is InspectionEvaluation.PENDING
+
+
 def test_wrong_heading_or_distance_is_pending():
     planner = InspectionPlanner(hold_time_sec=0.0)
     assert planner.evaluate(track(last_seen_s=1), robot(-1.2, 0.0, math.pi), SECOND).status \

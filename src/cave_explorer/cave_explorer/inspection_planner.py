@@ -58,7 +58,7 @@ class InspectionPlanner:
         self,
         stand_off_m: float = 1.2,
         distance_tolerance_m: float = 1.0,
-        heading_tolerance_deg: float = 30.0,
+        heading_tolerance_deg: float = 40.0,
         hold_time_sec: float = 2.0,
         sighting_range_m: float = 4.0,
         sighting_window_sec: float = 15.0,
@@ -77,6 +77,11 @@ class InspectionPlanner:
         viewpoint was at 1.2 m. A tighter window is never satisfied there.
 
         ``keep_out_margin_m`` covers the chassis' 0.71 m half-diagonal plus 0.3 m.
+
+        ``heading_tolerance_deg`` exceeds Nav2's ``yaw_goal_tolerance`` (0.5 rad,
+        28.6 deg) plus the bearing change from stopping up to 1.0 m off the
+        viewpoint; at 30 deg a green_crystals inspection failed at 34 deg. The
+        camera's 120 deg field of view still holds the artefact at 40 deg.
         """
         self.stand_off_m = stand_off_m
         self.distance_tolerance_m = distance_tolerance_m
