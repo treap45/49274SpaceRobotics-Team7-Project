@@ -168,6 +168,23 @@ def test_diagonal_corridor():
     assert abs(result.bottleneck_width_m - 2.1) <= 2 * 0.3
 
 
+@pytest.mark.parametrize('width', [5, 6])
+@pytest.mark.parametrize('thickness', [1, 2, 3])
+def test_doorway(width, thickness):
+    """A short opening in a dividing wall still separates two wide rooms."""
+    grid = np.full((60, 120), 100, dtype=np.int16)
+    grid[10:50, 5:115] = 0
+    grid[10:50, 59:59 + thickness] = 100
+    grid[27:27 + width, 59:59 + thickness] = 0
+    result = analyze_geometry(grid, 0.3, (30, 20))
+    assert result.reachable_mask[30, 100]
+    assert result.bottleneck_position_rc is not None
+    r, c = result.bottleneck_position_rc
+    assert 27 <= r < 27 + width and 59 <= c < 59 + thickness
+    assert abs(result.bottleneck_width_m - width * 0.3) <= 0.3 + 1e-9
+    assert all(grid[p] >= 50 for p in result.bottleneck_wall_points_rc)
+
+
 def test_l_shaped_corridor():
     grid = two_rooms()
     grid[15:22, 40:60] = 0

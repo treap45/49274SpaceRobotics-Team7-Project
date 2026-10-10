@@ -94,11 +94,25 @@ def analyze_geometry(grid, resolution, robot_rc, robot_radius_m=0.5,
     field = np.pad(distance, 1)
     gy, gx = np.gradient(field, resolution)
     magnitude = np.hypot(gy[1:-1, 1:-1], gx[1:-1, 1:-1])
-    ridge = reachable & (magnitude <= ridge_threshold + 1e-9)
+    gradient_ridge = reachable & (magnitude <= ridge_threshold + 1e-9)
+    plateau_ridge = np.zeros(grid.shape, dtype=bool)
+    # Even-cell openings can have a two-cell clearance plateau. At a short
+    # doorway its small longitudinal gradient pushes the total just above 0.5.
+    # Retain these discrete normal maxima; flat distance planes do not qualify.
+    centre = field[1:-1, 1:-1]
+    for before, after in ((field[:-2, 1:-1], field[2:, 1:-1]),
+                          (field[1:-1, :-2], field[1:-1, 2:])):
+        plateau = ((np.abs(before - centre) <= 1e-9) & (after < centre - 1e-9)
+                   | (np.abs(after - centre) <= 1e-9) & (before < centre - 1e-9))
+        plateau_ridge |= reachable & plateau
+    ridge = gradient_ridge | plateau_ridge
     result.ridge_mask = ridge
     window = 2 * max(1, math.ceil(search_radius_m / resolution)) + 1
-    minimum = ndimage.minimum_filter(np.where(ridge, distance, np.inf), size=window)
-    minima = ridge & (distance <= minimum + 1e-9)
+    minimum = ndimage.minimum_filter(np.where(gradient_ridge, distance, np.inf), size=window)
+    minima = gradient_ridge & (distance <= minimum + 1e-9)
+    # Supplemental raster plateaus must not suppress a gradient-ridge saddle.
+    plateau_minimum = ndimage.minimum_filter(np.where(ridge, distance, np.inf), size=window)
+    minima |= plateau_ridge & (distance <= plateau_minimum + 1e-9)
     groups, count = ndimage.label(minima, structure=np.ones((3, 3)))
     candidates = []
     walls = {}
@@ -130,14 +144,21 @@ def analyze_geometry(grid, resolution, robot_rc, robot_radius_m=0.5,
             continue
         # A bottleneck separates nearby reachable space: cut a disk at p and
         # require two or more of the remaining local parts to widen.
-        rr, cc = np.ogrid[:grid.shape[0], :grid.shape[1]]
+        # Pixels outside the existing local disk cannot connect its parts.
+        # Crop with a one-cell halo for rim dilation; keep the same disk cut
+        # and connectivity test without relabeling the entire map per saddle.
+        extent = math.ceil(widening_distance_m / resolution) + 1
+        r0, r1 = max(0, p[0] - extent), min(grid.shape[0], p[0] + extent + 1)
+        c0, c1 = max(0, p[1] - extent), min(grid.shape[1], p[1] + extent + 1)
+        rr, cc = np.ogrid[r0:r1, c0:c1]
         near = (rr - p[0]) ** 2 + (cc - p[1]) ** 2
         cut = near <= (distance[p] / resolution + 1.5) ** 2
         local = near <= (widening_distance_m / resolution) ** 2
-        parts, _ = ndimage.label(reachable & local & ~cut)
+        parts, _ = ndimage.label(reachable[r0:r1, c0:c1] & local & ~cut)
         rim = ndimage.binary_dilation(cut) & ~cut
         wider_sides = [side for side in set(np.unique(parts[rim])) - {0}
-                       if np.any(distance[parts == side] > widening_ratio * distance[p])]
+                       if np.any(distance[r0:r1, c0:c1][parts == side]
+                                 > widening_ratio * distance[p])]
         if len(wider_sides) >= 2:
             candidates.append(p)
             walls[p] = tuple(pair)

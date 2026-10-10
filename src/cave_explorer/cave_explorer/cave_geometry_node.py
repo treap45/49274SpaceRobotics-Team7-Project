@@ -80,7 +80,7 @@ class CaveGeometryNode(Node):
         super().__init__('cave_geometry')
         self.declare_parameter('update_period_s', 2.0)
         self.declare_parameter('robot_radius_m', 0.5)
-        self.declare_parameter('publish_distance_map', False)
+        self.declare_parameter('publish_distance_map', True)
         period = self.get_parameter('update_period_s').value
         radius = self.get_parameter('robot_radius_m').value
         if not math.isfinite(period) or period <= 0 or not math.isfinite(radius) or radius < 0:
