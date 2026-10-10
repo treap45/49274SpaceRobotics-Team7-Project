@@ -49,9 +49,11 @@ def analyze_geometry(grid, resolution, robot_rc, robot_radius_m=0.5,
     """Analyse a snapshot, restricting all reported features to robot reachability.
 
     Four-connectivity prevents corner cutting. Local ridge-minimum plateaus are
-    represented once. A candidate needs opposite occupied walls and straight,
-    reachable paths to wider space on both tangent sides within 12 m. This
-    conservative test can miss curved passages, but rejects dead-end tips.
+    represented once. A candidate needs opposite occupied walls, and cutting a
+    disk of its clearance out of the reachable space within 12 m must leave two
+    or more parts that each widen beyond ``widening_ratio`` times its clearance.
+    This holds for straight, diagonal and curved passages, and rejects dead-end
+    tips and gaps beside an obstacle that the robot can drive round.
     """
     started = time.perf_counter()
     grid = np.asarray(grid)
@@ -126,19 +128,17 @@ def analyze_geometry(grid, resolution, robot_rc, robot_radius_m=0.5,
             pair.append(tuple(points[hits[0]]))
         if len(pair) != 2:
             continue
-        tangent = np.array([-normal[1], normal[0]])
-        wider = []
-        for sign in (-1, 1):
-            steps = np.arange(1, widening_distance_m / resolution + 1)
-            points = np.rint(np.asarray(p) + sign * steps[:, None] * tangent).astype(int)
-            inside = ((points >= 0) & (points < grid.shape)).all(axis=1)
-            valid = np.zeros(len(points), dtype=bool)
-            valid[inside] = reachable[tuple(points[inside].T)]
-            stop = np.flatnonzero(~valid)
-            points = points[:stop[0]] if stop.size else points
-            wider.append(bool(len(points) and np.any(
-                distance[tuple(points.T)] > widening_ratio * distance[p])))
-        if all(wider):
+        # A bottleneck separates nearby reachable space: cut a disk at p and
+        # require two or more of the remaining local parts to widen.
+        rr, cc = np.ogrid[:grid.shape[0], :grid.shape[1]]
+        near = (rr - p[0]) ** 2 + (cc - p[1]) ** 2
+        cut = near <= (distance[p] / resolution + 1.5) ** 2
+        local = near <= (widening_distance_m / resolution) ** 2
+        parts, _ = ndimage.label(reachable & local & ~cut)
+        rim = ndimage.binary_dilation(cut) & ~cut
+        wider_sides = [side for side in set(np.unique(parts[rim])) - {0}
+                       if np.any(distance[parts == side] > widening_ratio * distance[p])]
+        if len(wider_sides) >= 2:
             candidates.append(p)
             walls[p] = tuple(pair)
     result.saddle_candidates = tuple(candidates)
