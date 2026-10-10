@@ -30,5 +30,12 @@ def generate_launch_description():
 
     ld.add_action(use_sim_time_launch_arg)
     ld.add_action(cave_explorer_node)
+    ld.add_action(Node(
+        package='cave_explorer',
+        executable='cave_geometry',
+        name='cave_geometry',
+        output='screen',
+        parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}]
+    ))
 
     return ld
