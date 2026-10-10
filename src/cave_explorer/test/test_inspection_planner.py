@@ -17,6 +17,7 @@ from cave_explorer.inspection_planner import InspectionPlanner
 from cave_explorer.interfaces import (
     ArtifactTrack,
     GREEN_ALIEN,
+    GREEN_CRYSTALS,
     InspectionEvaluation,
     InspectionGoalStatus,
 )
@@ -44,8 +45,8 @@ def open_room(size=100):
     return cells
 
 
-def track(x=0.0, y=0.0, last_seen_s=0.0, artifact_id=1):
-    return ArtifactTrack(artifact_id, GREEN_ALIEN, (x, y, 0.3),
+def track(x=0.0, y=0.0, last_seen_s=0.0, artifact_id=1, class_name=GREEN_ALIEN):
+    return ArtifactTrack(artifact_id, class_name, (x, y, 0.3),
                          int(last_seen_s * SECOND), 3, True)
 
 
@@ -75,6 +76,30 @@ def test_goal_on_robot_side_at_stand_off_facing_artefact():
     assert plan.goal.header.frame_id == 'map'
 
 
+def test_keep_out_type_is_viewed_from_outside_its_disk():
+    """green_crystals' 2.7 m keep-out disk plus the 1.0 m margin: 3.7 m."""
+    planner = InspectionPlanner()
+    assert planner.stand_off_for(GREEN_ALIEN) == pytest.approx(1.2)
+    assert planner.stand_off_for(GREEN_CRYSTALS) == pytest.approx(3.7)
+    plan = planner.make_goal(track(class_name=GREEN_CRYSTALS), robot(-4.5, 0.0),
+                             make_map(open_room()))
+    assert plan.status is InspectionGoalStatus.READY
+    assert xy(plan.goal) == pytest.approx((-3.7, 0.0), abs=1e-6)
+
+
+def test_keep_out_type_is_satisfied_at_its_own_stand_off():
+    """Sightings at 4.5 m count as close for a 3.7 m viewpoint, beyond sighting_range_m."""
+    planner = InspectionPlanner(hold_time_sec=0.0, sighting_range_m=4.0)
+    crystals = dict(class_name=GREEN_CRYSTALS)
+    planner.evaluate(track(last_seen_s=0, **crystals), robot(-8.0, 0.0), 0)
+    planner.evaluate(track(last_seen_s=1, **crystals), robot(-4.5, 0.0), SECOND)
+    assert planner.evaluate(track(last_seen_s=1, **crystals), robot(-3.7, 0.0),
+                            2 * SECOND).status is InspectionEvaluation.SATISFIED
+    # 1.2 m away is far off the 3.7 m stand-off.
+    assert planner.evaluate(track(last_seen_s=1, **crystals), robot(-1.2, 0.0),
+                            3 * SECOND).status is InspectionEvaluation.PENDING
+
+
 def test_exclude_gives_a_different_pose():
     planner = InspectionPlanner()
     room = make_map(open_room())
@@ -85,6 +110,20 @@ def test_exclude_gives_a_different_pose():
     # Still faces the artefact.
     assert yaw(second) == pytest.approx(
         math.atan2(-second.pose.position.y, -second.pose.position.x), abs=1e-6)
+
+
+def test_retry_looks_from_another_side():
+    """As in simulation: green_crystals viewed from 3.7 m, and the robot has
+    moved, so the same bearing gives a pose 0.7 m from the first. A distance
+    exclusion lets it through; the angle exclusion does not."""
+    planner = InspectionPlanner()
+    room = make_map(open_room())
+    crystals = track(class_name=GREEN_CRYSTALS)
+    first = planner.make_goal(crystals, robot(-4.5, 0.0), room).goal
+    second = planner.make_goal(crystals, robot(-4.5, -0.9), room, exclude=(first,)).goal
+    first_bearing = math.atan2(first.pose.position.y, first.pose.position.x)
+    second_bearing = math.atan2(second.pose.position.y, second.pose.position.x)
+    assert abs(math.remainder(second_bearing - first_bearing, math.tau)) >= math.radians(30)
 
 
 def test_wall_next_to_preferred_pose_moves_the_goal():
@@ -133,7 +172,7 @@ def test_every_candidate_excluded_is_no_safe_goal():
             break
         tried.append(plan.goal)
     assert plan.status is InspectionGoalStatus.NO_SAFE_GOAL
-    assert len(tried) == 16          # 8 bearings x 2 stand-off distances
+    assert len(tried) == 8           # one per bearing: a tried bearing excludes both stand-offs
 
 
 # --------------------------------------------------------------------------
@@ -150,6 +189,16 @@ def test_satisfied_only_after_hold_time_in_ros_time():
         is InspectionEvaluation.PENDING
     assert planner.evaluate(track(last_seen_s=12), here, 12 * SECOND).status \
         is InspectionEvaluation.SATISFIED
+
+
+def test_heading_within_nav2_slack_is_accepted():
+    """35 deg off: Nav2's 28.6 deg yaw tolerance plus a stop 1 m off the viewpoint."""
+    planner = InspectionPlanner(hold_time_sec=0.0)
+    planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0, math.radians(35)), 0)
+    assert planner.evaluate(track(last_seen_s=1), robot(-1.2, 0.0, math.radians(35)),
+                            SECOND).status is InspectionEvaluation.SATISFIED
+    assert planner.evaluate(track(last_seen_s=2), robot(-1.2, 0.0, math.radians(45)),
+                            2 * SECOND).status is InspectionEvaluation.PENDING
 
 
 def test_wrong_heading_or_distance_is_pending():
@@ -197,12 +246,39 @@ def test_old_close_sighting_expires():
 
 def test_lost_when_close_and_unseen_but_not_when_far():
     planner = InspectionPlanner(sighting_window_sec=15.0)
-    assert planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0), 16 * SECOND).status \
-        is InspectionEvaluation.LOST
-    assert planner.evaluate(track(last_seen_s=0), robot(-4.0, 0.0), 16 * SECOND).status \
-        is InspectionEvaluation.PENDING
-    assert planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0), 10 * SECOND).status \
+    close, far = robot(-1.2, 0.0), robot(-4.0, 0.0)
+    assert planner.evaluate(track(last_seen_s=0), close, 0).status \
         is not InspectionEvaluation.LOST
+    assert planner.evaluate(track(last_seen_s=0), close, 10 * SECOND).status \
+        is not InspectionEvaluation.LOST
+    assert planner.evaluate(track(last_seen_s=0), close, 16 * SECOND).status \
+        is InspectionEvaluation.LOST
+    assert planner.evaluate(track(last_seen_s=0), far, 30 * SECOND).status \
+        is InspectionEvaluation.PENDING
+
+
+def test_lost_clock_starts_when_the_robot_comes_within_range():
+    """An artefact last seen 30 s ago, while another was inspected, is not LOST
+    the moment the robot reaches its viewpoint."""
+    planner = InspectionPlanner(sighting_window_sec=15.0)
+    planner.evaluate(track(last_seen_s=0), robot(-8.0, 0.0), 20 * SECOND)
+    assert planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0), 30 * SECOND).status \
+        is InspectionEvaluation.PENDING
+    assert planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0), 44 * SECOND).status \
+        is InspectionEvaluation.PENDING
+    assert planner.evaluate(track(last_seen_s=0), robot(-1.2, 0.0), 46 * SECOND).status \
+        is InspectionEvaluation.LOST
+
+
+def test_new_viewpoint_restarts_the_lost_clock():
+    planner = InspectionPlanner(sighting_window_sec=15.0)
+    here = robot(-1.2, 0.0)
+    planner.evaluate(track(last_seen_s=0), here, 0)
+    assert planner.evaluate(track(last_seen_s=0), here, 16 * SECOND).status \
+        is InspectionEvaluation.LOST
+    planner.make_goal(track(), robot(-4.0, 0.0), make_map(open_room()))
+    assert planner.evaluate(track(last_seen_s=0), here, 17 * SECOND).status \
+        is InspectionEvaluation.PENDING
 
 
 def test_hold_timer_is_per_artefact():

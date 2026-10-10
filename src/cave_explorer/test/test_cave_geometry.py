@@ -146,3 +146,57 @@ def test_occupancy_threshold_and_corner_cutting():
     assert result.reachable_mask[2, 2]
     assert not result.reachable_mask[5, 5]
     assert not result.reachable_mask[0, 0]
+
+
+def two_rooms():
+    """Rooms at columns 5-39 and 80-114; the corridor between is added per test."""
+    grid = np.full((60, 120), 100, dtype=np.int16)
+    grid[10:50, 5:40] = 0
+    grid[10:50, 80:115] = 0
+    return grid
+
+
+def test_diagonal_corridor():
+    grid = two_rooms()
+    for c in range(40, 81):
+        top = 15 + int((c - 40) * 0.6)
+        grid[top:top + 8, c] = 0        # ~2.1 m measured across the slope
+    result = analyze_geometry(grid, 0.3, (30, 20))
+    assert result.reachable_mask[30, 100]
+    assert result.bottleneck_position_rc is not None
+    assert 40 <= result.bottleneck_position_rc[1] <= 80
+    assert abs(result.bottleneck_width_m - 2.1) <= 2 * 0.3
+
+
+def test_l_shaped_corridor():
+    grid = two_rooms()
+    grid[15:22, 40:60] = 0
+    grid[15:45, 53:60] = 0
+    grid[38:45, 53:80] = 0
+    result = analyze_geometry(grid, 0.3, (30, 20))
+    assert result.reachable_mask[30, 100]
+    assert result.bottleneck_position_rc is not None
+    assert 40 <= result.bottleneck_position_rc[1] <= 80
+    assert abs(result.bottleneck_width_m - 2.1) <= 2 * 0.3
+
+
+def test_arc_corridor():
+    grid = two_rooms()
+    rows, cols = np.mgrid[0:60, 0:120]
+    radius = np.hypot(rows - 60, cols - 60)
+    grid[(radius > 22) & (radius < 29) & (rows < 45)] = 0
+    result = analyze_geometry(grid, 0.3, (30, 20))
+    assert result.reachable_mask[30, 100]
+    assert result.bottleneck_position_rc is not None
+    assert 40 <= result.bottleneck_position_rc[1] <= 80
+
+
+def test_gap_beside_an_obstacle_is_not_a_bottleneck():
+    """A rock leaves a 1.2 m gap to one wall and a wide way round the other side,
+    as the ice_formation did in simulation."""
+    grid = two_rooms()
+    grid[15:45, 40:80] = 0              # 9 m wide passage
+    grid[19:25, 55:63] = 100            # rock: 1.2 m gap above it, 6 m below it
+    result = analyze_geometry(grid, 0.3, (30, 20))
+    gap = [p for p in result.saddle_candidates if 15 <= p[0] < 19 and 55 <= p[1] < 63]
+    assert not gap

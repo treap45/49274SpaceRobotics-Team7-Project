@@ -352,7 +352,7 @@ class BehaviourManager:
                 inspection.arrived_ns = now_ns
             elif now_ns - inspection.arrived_ns > self.config.dwell_timeout_sec * 1e9:
                 self._attempt_failed(now_ns, 'reached the viewpoint but inspection was '
-                                     'never satisfied')
+                                     f'never satisfied ({assessment.reason})')
             return
         # The viewpoint failed, not the attempt: try another one.
         self._log(f'viewpoint for artefact {inspection.artifact_id} failed '

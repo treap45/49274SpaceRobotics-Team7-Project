@@ -3,9 +3,15 @@
 import numpy as np
 import pytest
 
-from cave_explorer.artifact_obstacles import ArtifactObstacles
+from cave_explorer.artifact_obstacles import ArtifactObstacles, keep_out_points
 from cave_explorer.artifact_tracker import SIM_CAMERA_MODEL
-from cave_explorer.interfaces import Detection2D, DetectionBatch, GREEN_CRYSTALS
+from cave_explorer.interfaces import (
+    ArtifactTrack,
+    Detection2D,
+    DetectionBatch,
+    GREEN_CRYSTALS,
+    WHITE_SPHERE,
+)
 
 WIDTH, HEIGHT = 720, 480
 # Camera at (0, 0, 0.5) in map looking along +x (as in test_artifact_tracker).
@@ -62,3 +68,24 @@ def test_voxels_accumulate_without_duplicates():
     assert len(obstacles) > first
     obstacles.reset()
     assert len(obstacles) == 0
+
+
+def artefact(class_name, x, y, artifact_id=1):
+    return ArtifactTrack(artifact_id, class_name, (x, y, 0.3), 0, 3, True)
+
+
+def test_keep_out_disk_round_green_crystals_only():
+    points = keep_out_points([artefact(GREEN_CRYSTALS, 10.0, 5.0),
+                              artefact(WHITE_SPHERE, 20.0, 5.0, artifact_id=2)], (0.0, 0.0))
+    distance = np.hypot(points[:, 0] - 10.0, points[:, 1] - 5.0)
+    assert len(points) > 0 and distance.max() <= 2.7 + 1e-5
+    assert distance.max() > 2.5 and distance.min() < 0.15      # filled, not a ring
+    assert np.all(points[:, 2] == pytest.approx(0.5))          # inside Nav2's 0.1-2.5 m band
+
+
+def test_keep_out_disk_never_covers_the_robot():
+    crystals = [artefact(GREEN_CRYSTALS, 0.0, 0.0)]
+    points = keep_out_points(crystals, (2.0, 0.0))
+    assert np.hypot(points[:, 0] - 2.0, points[:, 1]).min() >= 1.0 - 1e-5
+    assert len(keep_out_points(crystals, (0.5, 0.0))) == 0
+    assert len(keep_out_points([], (0.0, 0.0))) == 0
