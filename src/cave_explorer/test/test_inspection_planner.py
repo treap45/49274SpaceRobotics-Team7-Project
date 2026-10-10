@@ -112,6 +112,20 @@ def test_exclude_gives_a_different_pose():
         math.atan2(-second.pose.position.y, -second.pose.position.x), abs=1e-6)
 
 
+def test_retry_looks_from_another_side():
+    """As in simulation: green_crystals viewed from 3.7 m, and the robot has
+    moved, so the same bearing gives a pose 0.7 m from the first. A distance
+    exclusion lets it through; the angle exclusion does not."""
+    planner = InspectionPlanner()
+    room = make_map(open_room())
+    crystals = track(class_name=GREEN_CRYSTALS)
+    first = planner.make_goal(crystals, robot(-4.5, 0.0), room).goal
+    second = planner.make_goal(crystals, robot(-4.5, -0.9), room, exclude=(first,)).goal
+    first_bearing = math.atan2(first.pose.position.y, first.pose.position.x)
+    second_bearing = math.atan2(second.pose.position.y, second.pose.position.x)
+    assert abs(math.remainder(second_bearing - first_bearing, math.tau)) >= math.radians(30)
+
+
 def test_wall_next_to_preferred_pose_moves_the_goal():
     cells = open_room()
     cells[:, 37:40] = 100            # wall at x = -1.3 .. -1.0 m
@@ -158,7 +172,7 @@ def test_every_candidate_excluded_is_no_safe_goal():
             break
         tried.append(plan.goal)
     assert plan.status is InspectionGoalStatus.NO_SAFE_GOAL
-    assert len(tried) == 16          # 8 bearings x 2 stand-off distances
+    assert len(tried) == 8           # one per bearing: a tried bearing excludes both stand-offs
 
 
 # --------------------------------------------------------------------------

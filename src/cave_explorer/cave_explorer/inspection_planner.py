@@ -12,7 +12,11 @@ has ``clearance_m`` to every occupied cell (robot radius 0.5 m plus margin) and
 the camera has a line of sight to the artefact. Nav2 plans on an inflated
 costmap rather than this grid, so a pose that passes here can still be
 rejected; ``exclude`` lists poses already tried so the next call returns a
-different one (Workplan 4.4).
+different one (Workplan 4.4). A candidate within ``exclude_angle_deg`` of a
+tried pose's bearing round the artefact is excluded, so a retry looks from
+another side: in simulation the detector could not see a green_crystals from
+one side, and the retry (0.3 m exclusion) went 0.5 m further along the same
+bearing and failed again.
 
 ``evaluate`` follows the task sheet's Planning 2: reach a close-range
 viewpoint "keeping the artefact in view". It is SATISFIED once the robot has
@@ -59,7 +63,7 @@ class InspectionPlanner:
         sighting_range_m: float = 4.0,
         sighting_window_sec: float = 15.0,
         clearance_m: float = 0.6,
-        exclude_radius_m: float = 0.3,
+        exclude_angle_deg: float = 30.0,
         bearing_offsets_deg: tuple = (0, 45, -45, 90, -90, 135, -135, 180),
         extra_stand_off_m: tuple = (0.0, 0.5),
         keep_out_margin_m: float = 1.0,
@@ -81,7 +85,7 @@ class InspectionPlanner:
         self.sighting_range_m = sighting_range_m
         self.sighting_window_ns = int(sighting_window_sec * 1e9)
         self.clearance_m = clearance_m
-        self.exclude_radius_m = exclude_radius_m
+        self.exclude_angle = math.radians(exclude_angle_deg)
         self.bearing_offsets = tuple(math.radians(d) for d in bearing_offsets_deg)
         self.extra_stand_off_m = tuple(extra_stand_off_m)
         self.keep_out_margin_m = keep_out_margin_m
@@ -114,7 +118,8 @@ class InspectionPlanner:
                                   'artefact is outside the current map')
 
         clearance = grid.clearance_m()
-        excluded = [(pose.pose.position.x, pose.pose.position.y) for pose in exclude]
+        excluded = [math.atan2(pose.pose.position.y - ay, pose.pose.position.x - ax)
+                    for pose in exclude]
         toward_robot = math.atan2(robot_pose.y - ay, robot_pose.x - ax)
         rejected = {'excluded': 0, 'not free': 0, 'too close to a wall': 0,
                     'no line of sight': 0}
@@ -125,7 +130,7 @@ class InspectionPlanner:
                 bearing = toward_robot + offset
                 gx = ax + stand_off * math.cos(bearing)
                 gy = ay + stand_off * math.sin(bearing)
-                if any(math.dist((gx, gy), p) < self.exclude_radius_m for p in excluded):
+                if any(abs(_wrap(bearing - tried)) < self.exclude_angle for tried in excluded):
                     rejected['excluded'] += 1
                 elif not grid.is_free(gx, gy):
                     rejected['not free'] += 1
