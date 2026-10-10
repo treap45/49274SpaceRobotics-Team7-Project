@@ -17,6 +17,7 @@ from cave_explorer.inspection_planner import InspectionPlanner
 from cave_explorer.interfaces import (
     ArtifactTrack,
     GREEN_ALIEN,
+    GREEN_CRYSTALS,
     InspectionEvaluation,
     InspectionGoalStatus,
 )
@@ -44,8 +45,8 @@ def open_room(size=100):
     return cells
 
 
-def track(x=0.0, y=0.0, last_seen_s=0.0, artifact_id=1):
-    return ArtifactTrack(artifact_id, GREEN_ALIEN, (x, y, 0.3),
+def track(x=0.0, y=0.0, last_seen_s=0.0, artifact_id=1, class_name=GREEN_ALIEN):
+    return ArtifactTrack(artifact_id, class_name, (x, y, 0.3),
                          int(last_seen_s * SECOND), 3, True)
 
 
@@ -73,6 +74,30 @@ def test_goal_on_robot_side_at_stand_off_facing_artefact():
     assert xy(plan.goal) == pytest.approx((-1.2, 0.0), abs=1e-6)
     assert yaw(plan.goal) == pytest.approx(0.0, abs=1e-6)
     assert plan.goal.header.frame_id == 'map'
+
+
+def test_keep_out_type_is_viewed_from_outside_its_disk():
+    """green_crystals' 2.7 m keep-out disk plus the 1.0 m margin: 3.7 m."""
+    planner = InspectionPlanner()
+    assert planner.stand_off_for(GREEN_ALIEN) == pytest.approx(1.2)
+    assert planner.stand_off_for(GREEN_CRYSTALS) == pytest.approx(3.7)
+    plan = planner.make_goal(track(class_name=GREEN_CRYSTALS), robot(-4.5, 0.0),
+                             make_map(open_room()))
+    assert plan.status is InspectionGoalStatus.READY
+    assert xy(plan.goal) == pytest.approx((-3.7, 0.0), abs=1e-6)
+
+
+def test_keep_out_type_is_satisfied_at_its_own_stand_off():
+    """Sightings at 4.5 m count as close for a 3.7 m viewpoint, beyond sighting_range_m."""
+    planner = InspectionPlanner(hold_time_sec=0.0, sighting_range_m=4.0)
+    crystals = dict(class_name=GREEN_CRYSTALS)
+    planner.evaluate(track(last_seen_s=0, **crystals), robot(-8.0, 0.0), 0)
+    planner.evaluate(track(last_seen_s=1, **crystals), robot(-4.5, 0.0), SECOND)
+    assert planner.evaluate(track(last_seen_s=1, **crystals), robot(-3.7, 0.0),
+                            2 * SECOND).status is InspectionEvaluation.SATISFIED
+    # 1.2 m away is far off the 3.7 m stand-off.
+    assert planner.evaluate(track(last_seen_s=1, **crystals), robot(-1.2, 0.0),
+                            3 * SECOND).status is InspectionEvaluation.PENDING
 
 
 def test_exclude_gives_a_different_pose():

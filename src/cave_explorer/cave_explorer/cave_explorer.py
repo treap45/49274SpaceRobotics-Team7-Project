@@ -26,6 +26,7 @@ goal, preempting ours.
 from collections import deque
 import math
 
+import numpy as np
 import rclpy
 from cv_bridge import CvBridge
 from geometry_msgs.msg import Pose2D, PoseStamped
@@ -41,7 +42,7 @@ from tf2_ros.buffer import Buffer
 from tf2_ros.transform_listener import TransformListener
 from visualization_msgs.msg import Marker, MarkerArray
 
-from cave_explorer.artifact_obstacles import ArtifactObstacles
+from cave_explorer.artifact_obstacles import ArtifactObstacles, keep_out_points
 from cave_explorer.artifact_tracker import ArtifactTracker, SIM_CAMERA_MODEL
 from cave_explorer.behaviour_manager import BehaviourConfig, BehaviourManager
 from cave_explorer.coverage_explorer import CoverageExplorer, TwoPhaseExplorer
@@ -291,9 +292,13 @@ class CaveExplorer(Node):
         self.publish_artifact_markers(tracks)
 
     def publish_artifact_obstacles(self):
-        """Everything ArtifactObstacles has accumulated, for Nav2's obstacle layers."""
+        """Everything ArtifactObstacles has accumulated, plus the keep-out disks, for Nav2."""
+        pose = self.get_pose_2d()
+        disks = keep_out_points(self.tracker_.snapshot(),
+                                None if pose is None else (pose.x, pose.y))
         header = Header(frame_id=MAP_FRAME, stamp=self.get_clock().now().to_msg())
-        self.obstacle_pub_.publish(point_cloud2.create_cloud_xyz32(header, self.obstacles_.points()))
+        self.obstacle_pub_.publish(point_cloud2.create_cloud_xyz32(
+            header, np.concatenate((self.obstacles_.points(), disks))))
 
     def publish_artifact_markers(self, tracks):
         """One sphere and label per confirmed artefact, coloured by inspection state."""
