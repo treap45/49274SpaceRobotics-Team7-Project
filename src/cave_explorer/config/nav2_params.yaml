@@ -249,9 +249,10 @@ global_costmap:
       # The chassis is a 1.0 x 1.0 m box (mars_explorer.urdf.xacro); a 0.5 m
       # robot_radius left its corners, 0.71 m out, off the costmap.
       footprint: "[ [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5] ]"
-      width: 100 # 10
-      height: 100 # 10
-      rolling_window: true
+      # Sized to the SLAM map by the static layer. A 100 m rolling window left
+      # the start area off the costmap once the robot reached the cave's east
+      # end (x ~ 54), and every goal there failed to plan.
+      rolling_window: false
       resolution: 0.3 # 0.1
       track_unknown_space: true
       plugins: ["static_layer", "obstacle_layer", "inflation_layer"]
