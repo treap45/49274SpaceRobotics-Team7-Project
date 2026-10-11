@@ -74,18 +74,57 @@ def artefact(class_name, x, y, artifact_id=1):
     return ArtifactTrack(artifact_id, class_name, (x, y, 0.3), 0, 3, True)
 
 
-def test_keep_out_disk_round_green_crystals_only():
+def test_keep_out_disk_is_half_the_measured_width_for_any_type():
+    sizes = {1: 5.4, 2: 1.6}
     points = keep_out_points([artefact(GREEN_CRYSTALS, 10.0, 5.0),
-                              artefact(WHITE_SPHERE, 20.0, 5.0, artifact_id=2)], (0.0, 0.0))
-    distance = np.hypot(points[:, 0] - 10.0, points[:, 1] - 5.0)
-    assert len(points) > 0 and distance.max() <= 2.7 + 1e-5
-    assert distance.max() > 2.5 and distance.min() < 0.15      # filled, not a ring
+                              artefact(WHITE_SPHERE, 20.0, 5.0, artifact_id=2)],
+                             sizes.get, (0.0, 0.0))
+    near_crystal = np.hypot(points[:, 0] - 10.0, points[:, 1] - 5.0)
+    near_sphere = np.hypot(points[:, 0] - 20.0, points[:, 1] - 5.0)
+    assert near_crystal[near_crystal < 5].max() <= 2.7 + 1e-5
+    assert near_crystal.min() < 0.15                            # filled, not a ring
+    assert 0.65 < near_sphere[near_sphere < 5].max() <= 0.8 + 1e-5
     assert np.all(points[:, 2] == pytest.approx(0.5))          # inside Nav2's 0.1-2.5 m band
+
+
+def test_keep_out_disk_needs_a_measured_width_and_is_capped():
+    track = [artefact(GREEN_CRYSTALS, 10.0, 5.0)]
+    assert len(keep_out_points(track, lambda _id: None, (0.0, 0.0))) == 0
+    points = keep_out_points(track, lambda _id: 20.0, (0.0, 0.0))
+    assert np.hypot(points[:, 0] - 10.0, points[:, 1] - 5.0).max() <= 3.0 + 1e-5
 
 
 def test_keep_out_disk_never_covers_the_robot():
     crystals = [artefact(GREEN_CRYSTALS, 0.0, 0.0)]
-    points = keep_out_points(crystals, (2.0, 0.0))
+    size = lambda _id: 5.4      # noqa: E731
+    points = keep_out_points(crystals, size, (2.0, 0.0))
     assert np.hypot(points[:, 0] - 2.0, points[:, 1]).min() >= 1.0 - 1e-5
-    assert len(keep_out_points(crystals, (0.5, 0.0))) == 0
-    assert len(keep_out_points([], (0.0, 0.0))) == 0
+    assert len(keep_out_points(crystals, size, (0.5, 0.0))) == 0
+    assert len(keep_out_points([], size, (0.0, 0.0))) == 0
+
+
+def test_contact_patch_is_ahead_of_the_robot_and_clear_of_it_after_backing_off():
+    obstacles = ArtifactObstacles()
+    assert obstacles.mark_contact(5.0, 5.0, 0.0) > 0
+    points = obstacles.points()
+    assert points[:, 0].min() >= 5.0 + 0.3 - 0.15 and points[:, 0].max() <= 5.0 + 1.0 + 0.15
+    assert np.abs(points[:, 1] - 5.0).max() <= 0.6 + 0.15
+    # After backing off 0.8 m the patch is ahead of the 0.5 m chassis front.
+    assert points[:, 0].min() > 5.0 - 0.8 + 0.5
+    assert obstacles.mark_contact(5.0, 5.0, 0.0) == 0          # same place: nothing new
+    obstacles.reset()
+    assert len(obstacles) == 0
+
+
+def test_contact_patch_follows_the_heading():
+    obstacles = ArtifactObstacles()
+    obstacles.mark_contact(0.0, 0.0, np.pi / 2)
+    points = obstacles.points()
+    assert points[:, 1].min() > 0.1 and np.abs(points[:, 0]).max() <= 0.75
+
+
+def test_keep_out_disks_only_for_the_given_classes():
+    tracks = [artefact(GREEN_CRYSTALS, 10.0, 5.0), artefact(WHITE_SPHERE, 20.0, 5.0, artifact_id=2)]
+    points = keep_out_points(tracks, lambda _id: 2.0, (0.0, 0.0), classes={WHITE_SPHERE})
+    assert len(points) > 0
+    assert np.hypot(points[:, 0] - 20.0, points[:, 1] - 5.0).max() <= 1.0 + 1e-5

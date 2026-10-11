@@ -39,7 +39,9 @@ Rules carried over from Workplan.md:
   reported ``ABORTED`` (so the explorer cools down near it) and replaced, an
   inspection viewpoint is swapped for another. In simulation the robot sat on
   a green_crystals artefact the lidar cannot see while Nav2 retried for three
-  120 s timeouts in a row.
+  120 s timeouts in a row. Giving up also cancels the goal and calls
+  ``on_stuck(robot_pose)``, which the node uses to mark where the robot stuck
+  and back away; it returns how many seconds to wait before the next goal.
 * A Nav2 rejection moves on to another viewpoint, excluding the ones already
   tried; it does not by itself use up an attempt (4.4).
 * ``DEFERRED`` is terminal for the run (4.6).
@@ -88,6 +90,7 @@ class Mode(Enum):
 class Navigator(Protocol):
     def send(self, goal: PoseStamped, timeout_sec: float | None = None) -> int: ...
     def poll(self, request_id: int) -> NavigationProgress: ...
+    def cancel(self, request_id: int) -> None: ...
 
 
 class Explorer(Protocol):
@@ -155,13 +158,15 @@ class BehaviourManager:
     def __init__(self, navigator: Navigator, explorer: Explorer,
                  planner: InspectionPlanner | None,
                  config: BehaviourConfig = BehaviourConfig(),
-                 log: Callable[[str], None] | None = None):
+                 log: Callable[[str], None] | None = None,
+                 on_stuck: Callable[[object], float] | None = None):
         """``planner`` may be ``None`` until B's module exists: the robot then only explores."""
         self._navigator = navigator
         self._explorer = explorer
         self._planner = planner
         self.config = config
         self._log = log or (lambda message: None)
+        self._on_stuck = on_stuck
 
         self.mode = Mode.EXPLORING
         self.status = 'starting'
@@ -170,6 +175,7 @@ class BehaviourManager:
         self._inspection: _Inspection | None = None
         self._last_plan_ns: int | None = None
         self._progress: _Progress | None = None
+        self._paused_until_ns: int | None = None
 
     @property
     def records(self) -> tuple[InspectionRecord, ...]:
@@ -186,6 +192,10 @@ class BehaviourManager:
                 self._records[artifact_id] = InspectionRecord(
                     artifact_id, InspectionState.UNVISITED, 0)
                 self._log(f'artefact {artifact_id} ({track.class_name}) added to inspect')
+
+        if self._paused_until_ns is not None and now_ns < self._paused_until_ns:
+            return      # recovering from being stuck: send nothing
+        self._paused_until_ns = None
 
         if self.mode is Mode.INSPECTING:
             self._inspect(now_ns, robot_pose, map_msg, targets)
@@ -221,12 +231,15 @@ class BehaviourManager:
                 status = NavigationStatus.ABORTED
                 reason = f'no progress for {self.config.stuck_timeout_sec:g} s'
                 self._log(f'exploration goal {_xy(current.goal)}: {reason}; giving it up')
+                self._recover(now_ns, robot_pose, current.request_id)
             else:
                 if self._due(now_ns, self.config.replan_period_sec):
                     self._replan_while_driving(now_ns, robot_pose, map_msg, current)
                 return
             self._explorer.report_outcome(current.goal, status, reason, now_ns)
             self._exploration = None
+            if self._paused_until_ns is not None:
+                return
 
         if self.mode is Mode.EXHAUSTED and not self._due(now_ns,
                                                          self.config.exhausted_retry_sec):
@@ -268,6 +281,15 @@ class BehaviourManager:
         if not keep_progress:
             self._progress = None
         return self._navigator.send(goal, timeout_sec=timeout_sec)
+
+    def _recover(self, now_ns, robot_pose, request_id) -> None:
+        """Stop driving a goal the robot is stuck on and let the node back it off."""
+        self._navigator.cancel(request_id)
+        self._progress = None
+        if self._on_stuck is not None:
+            pause_sec = self._on_stuck(robot_pose)
+            if pause_sec > 0.0:
+                self._paused_until_ns = now_ns + int(pause_sec * 1e9)
 
     def _stuck(self, now_ns, robot_pose) -> bool:
         """True once the robot has moved less than ``stuck_distance_m`` for ``stuck_timeout_sec``."""
@@ -339,6 +361,7 @@ class BehaviourManager:
             if self._stuck(now_ns, robot_pose):
                 self._log(f'viewpoint for artefact {inspection.artifact_id}: no progress for '
                           f'{self.config.stuck_timeout_sec:g} s; trying another')
+                self._recover(now_ns, robot_pose, inspection.request_id)
                 inspection.request_id = None
             return
         if progress.succeeded and not self._arrived(robot_pose, inspection.tried[-1]):

@@ -5,7 +5,16 @@ Contract: repository-root Workplan.md, section 4.3.
 
 ``update`` turns one DetectionBatch into map positions, using the depth image
 and the camera transform taken at the batch's capture time, and associates each
-position with a track of the same class within ``match_radius_m``.
+position with a track of the same class within that track's association gate.
+
+Size (no prior knowledge of the artefacts): each localised detection gives a
+width estimate, the box's pixel width times the selected depth over ``fx``.
+A track keeps the median of its recent widths. The association gate is
+``match_width_factor`` times the larger of the track's and the observation's
+width, at least ``min_match_radius_m``: a large artefact seen from different
+sides yields estimates spread over about its own width (one green_alien split
+into three tracks 1.7 m apart with a fixed 1.0 m radius), a small one does not.
+``size_m`` exposes the width to the obstacle and inspection modules.
 
 Tracks stay provisional and internal until they have ``confirm_count``
 observations. Only then do they get an ``artifact_id`` and appear in
@@ -26,7 +35,7 @@ Frames (Workplan 5): unprojection gives a point in the camera *optical* frame
 which is rotated relative to it, and is rejected.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import math
 from typing import List, Optional
 
@@ -56,6 +65,10 @@ class _Track:
     last_seen_ns: int
     observation_count: int
     artifact_id: Optional[int] = None
+    widths: list = field(default_factory=list)      # recent width estimates, metres
+
+    def width(self) -> float:
+        return float(np.median(self.widths)) if self.widths else 0.0
 
     def public(self) -> ArtifactTrack:
         return ArtifactTrack(
@@ -74,17 +87,16 @@ class ArtifactTracker:
     def __init__(
         self,
         confirm_count: int = 3,
-        match_radius_m: float = 2.5,
+        min_match_radius_m: float = 1.0,
+        match_width_factor: float = 0.75,
+        width_history: int = 25,
         min_valid_depth_fraction: float = 0.2,
         provisional_timeout_sec: float = 60.0,
         depth_band_width_m: float = 0.3,
         min_foreground_fraction: float = 0.05,
     ):
-        """``match_radius_m`` must stay below the spacing of same-class
-        artefacts or two of them merge: mars_cave.sdf has three per class, at
-        least 10 m apart. At 1.0 m, large artefacts seen from different sides
-        split into several tracks in simulation (one green_alien became three,
-        their estimates up to 1.7 m apart).
+        """``min_match_radius_m`` and ``match_width_factor`` set the association
+        gate from the measured artefact width (see the module docstring).
         ``provisional_timeout_sec`` drops unconfirmed tracks that were never
         seen again, which is what most bad-depth observations become."""
         if depth_band_width_m <= 0 or not math.isfinite(depth_band_width_m):
@@ -94,7 +106,9 @@ class ArtifactTracker:
         self.depth_band_width_m = depth_band_width_m
         self.min_foreground_fraction = min_foreground_fraction
         self.confirm_count = confirm_count
-        self.match_radius_m = match_radius_m
+        self.min_match_radius_m = min_match_radius_m
+        self.match_width_factor = match_width_factor
+        self.width_history = width_history
         self.min_valid_depth_fraction = min_valid_depth_fraction
         self.provisional_timeout_ns = int(provisional_timeout_sec * 1e9)
 
@@ -110,6 +124,13 @@ class ArtifactTracker:
         self._next_artifact_id = 1
         self._latest_stamp_ns = None
         self.last_rejections = []
+
+    def size_m(self, artifact_id: int) -> Optional[float]:
+        """Measured width of a confirmed artefact, or None if unknown."""
+        for track in self._tracks:
+            if track.artifact_id == artifact_id:
+                return track.width() or None
+        return None
 
     def snapshot(self) -> List[ArtifactTrack]:
         """Confirmed artefacts only; provisional tracks have no id yet."""
@@ -149,7 +170,9 @@ class ArtifactTracker:
             depth_m, u, v = sample
             point_camera = self._pixel_to_camera(u, v, depth_m, camera_model)
             position_map = self._transform_point(point_camera, transform)
-            self.update_observation(detection.class_name, position_map, stamp_ns)
+            x_min, _, x_max, _ = detection.bbox_xyxy
+            width_m = (x_max - x_min) * depth_m / self._camera_value(camera_model, 'fx')
+            self.update_observation(detection.class_name, position_map, stamp_ns, width_m)
 
         self._drop_stale_provisional(stamp_ns)
         return self.snapshot()
@@ -159,10 +182,11 @@ class ArtifactTracker:
         class_name: str,
         position_map,
         stamp_ns: int,
+        width_m: float = 0.0,
     ) -> Optional[ArtifactTrack]:
         """Associate one map observation; return the track once confirmed."""
         position_map = tuple(float(c) for c in position_map)
-        track = self._find_matching_track(class_name, position_map)
+        track = self._find_matching_track(class_name, position_map, width_m)
         if track is None:
             track = _Track(class_name, position_map, stamp_ns, 1)
             self._tracks.append(track)
@@ -174,6 +198,8 @@ class ArtifactTracker:
                 for old, new in zip(track.position_map, position_map))
             track.observation_count = n + 1
             track.last_seen_ns = max(track.last_seen_ns, stamp_ns)
+        if width_m > 0.0:
+            track.widths = (track.widths + [float(width_m)])[-self.width_history:]
 
         if track.artifact_id is None and track.observation_count >= self.confirm_count:
             track.artifact_id = self._allocate_id()
@@ -184,15 +210,20 @@ class ArtifactTracker:
         self._next_artifact_id += 1
         return artifact_id
 
-    def _find_matching_track(self, class_name: str, position_map) -> Optional[_Track]:
-        """Nearest track of the same class within ``match_radius_m``."""
+    def _gate_m(self, track: _Track, width_m: float) -> float:
+        return max(self.min_match_radius_m,
+                   self.match_width_factor * max(track.width(), width_m))
+
+    def _find_matching_track(self, class_name: str, position_map,
+                             width_m: float = 0.0) -> Optional[_Track]:
+        """Nearest track of the same class within its association gate."""
         best_track = None
-        best_distance = self.match_radius_m
+        best_distance = math.inf
         for track in self._tracks:
             if track.class_name != class_name:
                 continue
             distance = math.dist(track.position_map, position_map)
-            if distance <= best_distance:
+            if distance <= self._gate_m(track, width_m) and distance < best_distance:
                 best_distance = distance
                 best_track = track
         return best_track

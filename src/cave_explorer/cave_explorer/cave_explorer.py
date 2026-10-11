@@ -29,8 +29,8 @@ import math
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
-from geometry_msgs.msg import Pose2D, PoseStamped
-from nav_msgs.msg import OccupancyGrid
+from geometry_msgs.msg import Pose2D, PoseStamped, Twist
+from nav_msgs.msg import OccupancyGrid, Path
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.time import Time
@@ -56,6 +56,13 @@ ROBOT_FRAME = 'base_link'
 # Unprojected depth points are in the optical frame, not the image header's
 # camera_link (Workplan 5).
 CAMERA_OPTICAL_FRAME = 'camera_rgb_optical_frame'
+# After getting stuck: reverse 0.75 m, clear of the contact mark ahead.
+BACKOFF_SPEED_M_S = 0.25
+BACKOFF_SEC = 3.0
+# Nav2 replans at 1 Hz while it has a path, pausing for its spin/wait/backup
+# recoveries (up to ~5 s each) when the robot cannot follow it. No /plan for
+# this long - inside the 20 s stuck timeout - means Nav2 could not plan at all.
+PLAN_FRESH_SEC = 15.0
 # camera_joint in mars_explorer.urdf.xacro: the camera is 0.5 m ahead of base_link.
 CAMERA_FORWARD_M = 0.5
 
@@ -104,6 +111,7 @@ class CaveExplorer(Node):
         self.declare_parameter('depth_sync_tolerance_sec', 0.05)
 
         inspect_classes = frozenset(self.get_parameter('inspect_classes').value)
+        self.inspect_classes_ = inspect_classes
         unknown = inspect_classes - ARTIFACT_CLASSES
         if unknown:
             raise ValueError(f'inspect_classes has unknown labels {sorted(unknown)}')
@@ -131,9 +139,10 @@ class CaveExplorer(Node):
         self.manager_ = BehaviourManager(
             _GoalPublishingNavigator(self.navigation_, self.goal_pub_),
             self.explorer_,
-            InspectionPlanner(),
+            InspectionPlanner(size_of=self.tracker_.size_m),
             BehaviourConfig(inspect_classes=inspect_classes),
-            log=self.get_logger().info)
+            log=self.get_logger().info,
+            on_stuck=self.on_stuck)
         self.map_ = None
         self.last_status_ = None
         self.last_frontiers_ = None
@@ -144,9 +153,16 @@ class CaveExplorer(Node):
         self.coverage_pub_ = self.create_publisher(OccupancyGrid, 'camera_coverage', 1)
         self.obstacle_pub_ = self.create_publisher(PointCloud2, 'artifact_obstacles', 1)
         self.obstacle_timer_ = self.create_timer(1.0, self.publish_artifact_obstacles)
+        # Backing off after getting stuck: Nav2's goal is cancelled first, so
+        # nothing else drives cmd_vel meanwhile.
+        self.cmd_vel_pub_ = self.create_publisher(Twist, 'cmd_vel', 1)
+        self.backoff_until_ns_ = None
+        self.backoff_timer_ = self.create_timer(0.1, self.back_off)
         self.ticks_ = 0
 
         self.map_sub_ = self.create_subscription(OccupancyGrid, 'map', self.map_callback, 1)
+        self.last_plan_ns_ = None
+        self.plan_sub_ = self.create_subscription(Path, 'plan', self.plan_callback, 1)
         self.image_sub_ = self.create_subscription(Image, 'camera/image', self.image_callback, 1)
         self.depth_sub_ = self.create_subscription(
             Image, 'camera/depth/image', self.depth_callback, 5)
@@ -291,11 +307,48 @@ class CaveExplorer(Node):
             self.frontier_pub_.publish(frontier_markers(self.explorer_))
         self.publish_artifact_markers(tracks)
 
+    def plan_callback(self, _path: Path):
+        self.last_plan_ns_ = self.get_clock().now().nanoseconds
+
+    def on_stuck(self, robot_pose) -> float:
+        """Remember where the robot stuck, back it off; return seconds to wait.
+
+        Only when Nav2 still had a path: then the controller could not follow it
+        and something under the chassis held the robot. Without a recent /plan,
+        Nav2 could not plan to the goal (in simulation, a goal inside a keep-out
+        disk); the goal is already given up and there is nothing to mark.
+        """
+        now_ns = self.get_clock().now().nanoseconds
+        if self.last_plan_ns_ is None or now_ns - self.last_plan_ns_ > PLAN_FRESH_SEC * 1e9:
+            self.get_logger().warn(
+                f'No progress at ({robot_pose.x:.1f}, {robot_pose.y:.1f}) and no path from Nav2: '
+                'goal unreachable, not a collision')
+            return 0.0
+        added = self.obstacles_.mark_contact(robot_pose.x, robot_pose.y, robot_pose.theta)
+        self.get_logger().warn(
+            f'Stuck at ({robot_pose.x:.1f}, {robot_pose.y:.1f}): marked {added} obstacle '
+            f'cells ahead, backing off {BACKOFF_SPEED_M_S * BACKOFF_SEC:.2f} m')
+        self.publish_artifact_obstacles()
+        self.backoff_until_ns_ = (self.get_clock().now().nanoseconds
+                                  + int(BACKOFF_SEC * 1e9))
+        return BACKOFF_SEC + 1.0    # and a second for the costmap to take the mark
+
+    def back_off(self):
+        if self.backoff_until_ns_ is None:
+            return
+        twist = Twist()
+        if self.get_clock().now().nanoseconds < self.backoff_until_ns_:
+            twist.linear.x = -BACKOFF_SPEED_M_S
+        else:
+            self.backoff_until_ns_ = None       # one zero command to stop
+        self.cmd_vel_pub_.publish(twist)
+
     def publish_artifact_obstacles(self):
         """Everything ArtifactObstacles has accumulated, plus the keep-out disks, for Nav2."""
         pose = self.get_pose_2d()
-        disks = keep_out_points(self.tracker_.snapshot(),
-                                None if pose is None else (pose.x, pose.y))
+        disks = keep_out_points(self.tracker_.snapshot(), self.tracker_.size_m,
+                                None if pose is None else (pose.x, pose.y),
+                                classes=self.inspect_classes_)
         header = Header(frame_id=MAP_FRAME, stamp=self.get_clock().now().to_msg())
         self.obstacle_pub_.publish(point_cloud2.create_cloud_xyz32(
             header, np.concatenate((self.obstacles_.points(), disks))))

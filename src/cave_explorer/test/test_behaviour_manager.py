@@ -47,6 +47,7 @@ class FakeNavigator:
     def __init__(self):
         self.sent = []          # (request_id, goal, timeout)
         self.status = {}
+        self.cancelled = []
 
     def send(self, goal, timeout_sec=None):
         request_id = len(self.sent) + 1
@@ -56,6 +57,9 @@ class FakeNavigator:
 
     def poll(self, request_id):
         return self.status[request_id]
+
+    def cancel(self, request_id):
+        self.cancelled.append(request_id)
 
     def finish(self, request_id, status, reason=''):
         self.status[request_id] = NavigationProgress(status, reason=reason)
@@ -116,14 +120,15 @@ class FakePlanner:
 class World:
     """A manager wired to fakes, with a clock that advances one tick per step."""
 
-    def __init__(self, inspect=frozenset({GREEN_ALIEN}), planner=True, **config):
+    def __init__(self, inspect=frozenset({GREEN_ALIEN}), planner=True, on_stuck=None, **config):
         self.nav = FakeNavigator()
         self.explorer = FakeExplorer()
         self.planner = FakePlanner() if planner else None
         self.log = []
         self.manager = BehaviourManager(
             self.nav, self.explorer, self.planner,
-            BehaviourConfig(inspect_classes=inspect, **config), log=self.log.append)
+            BehaviourConfig(inspect_classes=inspect, **config), log=self.log.append,
+            on_stuck=on_stuck)
         self.now = 0
         self.robot = ROBOT
 
@@ -501,3 +506,36 @@ def test_switching_goals_while_stuck_does_not_reset_the_watchdog():
     for _ in range(6):
         world.step(seconds=5.0)              # the frontier keeps "moving": goal switches
     assert any('no progress' in line for line in world.log)
+
+
+def test_stuck_cancels_the_goal_runs_recovery_and_pauses():
+    calls = []
+
+    def on_stuck(pose):
+        calls.append((pose.x, pose.y))
+        return 4.0
+
+    world = World(stuck_timeout_sec=20.0, on_stuck=on_stuck)
+    world.step()
+    stuck_goal = world.nav.last_goal
+    world.explorer.keep_frontier_at(stuck_goal.pose.position.x)
+    for _ in range(6):
+        world.step(seconds=5.0)
+    assert calls == [(0.0, 0.0)]
+    assert world.nav.cancelled == [1]
+    sent = len(world.nav.sent)
+    world.step(seconds=1.0)
+    world.step(seconds=1.0)
+    assert len(world.nav.sent) == sent          # paused while backing off
+    world.step(seconds=3.0)
+    assert len(world.nav.sent) == sent + 1      # then exploring again
+    assert world.nav.last_goal is not stuck_goal
+
+
+def test_stuck_on_the_way_to_a_viewpoint_also_recovers():
+    calls = []
+    world = World(stuck_timeout_sec=20.0, on_stuck=lambda pose: calls.append(pose) or 0.0)
+    world.step(tracks=[track()])
+    for _ in range(6):
+        world.step(tracks=[track()], seconds=5.0)
+    assert len(calls) == 1 and world.nav.cancelled

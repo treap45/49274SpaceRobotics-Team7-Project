@@ -76,20 +76,25 @@ def test_goal_on_robot_side_at_stand_off_facing_artefact():
     assert plan.goal.header.frame_id == 'map'
 
 
-def test_keep_out_type_is_viewed_from_outside_its_disk():
-    """green_crystals' 2.7 m keep-out disk plus the 1.0 m margin: 3.7 m."""
-    planner = InspectionPlanner()
-    assert planner.stand_off_for(GREEN_ALIEN) == pytest.approx(1.2)
-    assert planner.stand_off_for(GREEN_CRYSTALS) == pytest.approx(3.7)
+def test_measured_artefact_is_viewed_from_outside_its_disk():
+    """A 5.4 m wide artefact: 2.7 m keep-out disk plus the 1.0 m margin is 3.7 m."""
+    planner = InspectionPlanner(size_of={1: 5.4}.get)
+    assert planner.stand_off_for(track(artifact_id=2)) == pytest.approx(1.2)    # unmeasured
+    assert planner.stand_off_for(track(artifact_id=1)) == pytest.approx(3.7)
     plan = planner.make_goal(track(class_name=GREEN_CRYSTALS), robot(-4.5, 0.0),
                              make_map(open_room()))
     assert plan.status is InspectionGoalStatus.READY
     assert xy(plan.goal) == pytest.approx((-3.7, 0.0), abs=1e-6)
 
 
-def test_keep_out_type_is_satisfied_at_its_own_stand_off():
+def test_small_measured_artefact_keeps_the_base_stand_off():
+    planner = InspectionPlanner(size_of={1: 0.6}.get)
+    assert planner.stand_off_for(track()) == pytest.approx(1.3)     # 0.3 m + 1.0 m margin
+
+
+def test_wide_artefact_is_satisfied_at_its_own_stand_off():
     """Sightings at 4.5 m count as close for a 3.7 m viewpoint, beyond sighting_range_m."""
-    planner = InspectionPlanner(hold_time_sec=0.0, sighting_range_m=4.0)
+    planner = InspectionPlanner(hold_time_sec=0.0, sighting_range_m=4.0, size_of={1: 5.4}.get)
     crystals = dict(class_name=GREEN_CRYSTALS)
     planner.evaluate(track(last_seen_s=0, **crystals), robot(-8.0, 0.0), 0)
     planner.evaluate(track(last_seen_s=1, **crystals), robot(-4.5, 0.0), SECOND)

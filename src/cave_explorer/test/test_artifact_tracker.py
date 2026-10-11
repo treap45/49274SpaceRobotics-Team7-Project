@@ -314,3 +314,23 @@ def test_repeated_viewpoints_confirm_ice_in_a_distinct_map_frame():
 def test_invalid_foreground_configuration_is_rejected(kwargs):
     with pytest.raises(ValueError):
         ArtifactTracker(**kwargs)
+
+
+def test_width_is_box_width_times_depth_over_fx():
+    tracker = ArtifactTracker(confirm_count=1)
+    see(tracker, 1, 3.0)                    # centred_box: 80 px wide
+    (track,) = tracker.snapshot()
+    assert tracker.size_m(track.artifact_id) == pytest.approx(80 * 3.0 / SIM_CAMERA_MODEL['fx'])
+    assert tracker.size_m(99) is None
+
+
+def test_gate_scales_with_measured_width():
+    """Two estimates 1.6 m apart: one track for a wide artefact, two for a small one."""
+    def two_sightings(width_m):
+        tracker = ArtifactTracker(confirm_count=1, min_match_radius_m=1.0, match_width_factor=0.75)
+        tracker.update_observation(GREEN_ALIEN, (5.0, 0.0, 0.5), 1, width_m)
+        tracker.update_observation(GREEN_ALIEN, (6.6, 0.0, 0.5), 2, width_m)
+        return len(tracker.snapshot())
+
+    assert two_sightings(2.6) == 1          # gate 1.95 m
+    assert two_sightings(0.8) == 2          # gate 1.0 m
