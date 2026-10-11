@@ -29,6 +29,11 @@ def generate_launch_description():
     )
 
     ld.add_action(use_sim_time_launch_arg)
+    ld.add_action(DeclareLaunchArgument(
+        'roadmap_record_path',
+        default_value='',
+        description='Pickle file for roadmap_replay; empty disables recording'
+    ))
     ld.add_action(cave_explorer_node)
     ld.add_action(Node(
         package='cave_explorer',
@@ -36,6 +41,14 @@ def generate_launch_description():
         name='cave_geometry',
         output='screen',
         parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}]
+    ))
+    ld.add_action(Node(
+        package='cave_explorer',
+        executable='online_roadmap',
+        name='online_roadmap',
+        output='screen',
+        parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time'),
+                     'record_path': LaunchConfiguration('roadmap_record_path')}]
     ))
 
     return ld
