@@ -140,6 +140,22 @@ def test_wall_next_to_preferred_pose_moves_the_goal():
     assert plan.goal.pose.position.x > -0.6
 
 
+def test_artefact_against_a_wall_uses_a_bearing_between_the_main_ones():
+    """Only a pose half way between two 45 deg bearings is known free."""
+    cells = np.full((100, 100), -1, dtype=np.int16)
+    bearing = math.radians(157.5)            # robot to the west: main bearing 180 deg
+    gx, gy = 1.2 * math.cos(bearing), 1.2 * math.sin(bearing)
+    rows, cols = np.mgrid[0:100, 0:100]
+    cells[np.hypot((cols + 0.5) * RESOLUTION - 5.0 - gx,
+                   (rows + 0.5) * RESOLUTION - 5.0 - gy) < 0.2] = 0
+    main_only = InspectionPlanner(bearing_offsets_deg=(0, 45, -45, 90, -90, 135, -135, 180))
+    assert main_only.make_goal(track(), robot(-4.0, 0.0), make_map(cells)).status \
+        is InspectionGoalStatus.NO_SAFE_GOAL
+    plan = InspectionPlanner().make_goal(track(), robot(-4.0, 0.0), make_map(cells))
+    assert plan.status is InspectionGoalStatus.READY
+    assert xy(plan.goal) == pytest.approx((gx, gy), abs=1e-6)
+
+
 def test_unknown_cells_are_not_used():
     cells = np.full((100, 100), -1, dtype=np.int16)
     plan = InspectionPlanner().make_goal(track(), robot(-4.0, 0.0), make_map(cells))

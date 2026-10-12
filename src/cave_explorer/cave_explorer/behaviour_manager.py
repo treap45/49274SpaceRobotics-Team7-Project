@@ -44,7 +44,16 @@ Rules carried over from Workplan.md:
   and back away; it returns how many seconds to wait before the next goal.
 * A Nav2 rejection moves on to another viewpoint, excluding the ones already
   tried; it does not by itself use up an attempt (4.4).
-* ``DEFERRED`` is terminal for the run (4.6).
+* ``DEFERRED`` is terminal for the run (4.6), with one exception: an artefact
+  deferred because the planner found no safe viewpoint gets one more round of
+  ``max_attempts`` once exploration is exhausted and the map is as complete as
+  it will get. Viewpoints are judged on the map, and a target seen early often
+  has unknown cells round it: in simulation a green_crystals against the cave
+  wall was deferred with 8 of 16 candidates "not free", and on the final map a
+  candidate passed. The round keeps the viewpoints already tried excluded and
+  happens once per artefact, so it cannot loop. Deferrals for other reasons
+  (lost, never satisfied) are not revisited: those were mostly false
+  detections, and driving back to them costs time for nothing.
 * Goals are switched by sending the new goal, never cancel-then-send:
   navigation_client explains why, and reports the preempted goal as
   ``CANCELED`` so nothing gets penalised for it.
@@ -176,6 +185,11 @@ class BehaviourManager:
         self._last_plan_ns: int | None = None
         self._progress: _Progress | None = None
         self._paused_until_ns: int | None = None
+        # Deferred for want of a safe viewpoint: artifact_id -> viewpoints tried.
+        self._awaiting_revisit: dict[int, list] = {}
+        # Revisit started: artifact_id -> viewpoints its first attempt excludes.
+        self._revisit_excluded: dict[int, list] = {}
+        self._revisited: set[int] = set()
 
     @property
     def records(self) -> tuple[InspectionRecord, ...]:
@@ -212,13 +226,13 @@ class BehaviourManager:
             self._begin_inspection(target, now_ns)
             self._inspect(now_ns, robot_pose, map_msg, targets)
         if self.mode is not Mode.INSPECTING:
-            self._explore(now_ns, robot_pose, map_msg)
+            self._explore(now_ns, robot_pose, map_msg, targets)
 
     # ------------------------------------------------------------------
     # Exploring
     # ------------------------------------------------------------------
 
-    def _explore(self, now_ns, robot_pose, map_msg) -> None:
+    def _explore(self, now_ns, robot_pose, map_msg, targets) -> None:
         current = self._exploration
         if current is not None:
             progress = self._navigator.poll(current.request_id)
@@ -250,6 +264,8 @@ class BehaviourManager:
         elif result.status is ExplorationGoalStatus.NOT_READY:
             self.mode = Mode.EXPLORING
             self.status = f'waiting: {result.reason}'
+        elif self._revisit_deferred(targets):
+            pass        # the next tick starts the inspection
         elif self.mode is not Mode.EXHAUSTED:
             self.mode = Mode.EXHAUSTED
             self.status = f'exploration paused: {result.reason}'
@@ -323,11 +339,26 @@ class BehaviourManager:
         here = (robot_pose.x, robot_pose.y)
         return min(waiting, key=lambda track: math.dist(here, track.position_map[:2]))
 
+    def _revisit_deferred(self, targets) -> bool:
+        """Exploration is exhausted: give targets deferred for want of a safe
+        viewpoint their one more round. True if any was put back."""
+        ids = [artifact_id for artifact_id in self._awaiting_revisit if artifact_id in targets]
+        for artifact_id in ids:
+            self._revisit_excluded[artifact_id] = self._awaiting_revisit.pop(artifact_id)
+            self._revisited.add(artifact_id)
+            self._set_record(artifact_id, InspectionState.UNVISITED, 0,
+                             self._records[artifact_id].last_failure_reason)
+            self._log(f'artefact {artifact_id}: exploration exhausted; looking again for a '
+                      'safe viewpoint on the final map')
+        return bool(ids)
+
     def _begin_inspection(self, track: ArtifactTrack, now_ns: int) -> None:
         # Any exploration goal is simply abandoned: sending the viewpoint
         # preempts it, and its CANCELED result is never reported.
         self._exploration = None
-        self._inspection = _Inspection(track.artifact_id, now_ns)
+        self._inspection = _Inspection(
+            track.artifact_id, now_ns,
+            excluded=self._revisit_excluded.pop(track.artifact_id, []))
         self._set_record(track.artifact_id, InspectionState.IN_PROGRESS, 1)
         self.mode = Mode.INSPECTING
         self.status = f'inspecting artefact {track.artifact_id} ({track.class_name}), attempt 1'
@@ -411,6 +442,9 @@ class BehaviourManager:
             return
         self._set_record(artifact_id, InspectionState.DEFERRED, attempts, reason)
         self._log(f'artefact {artifact_id} deferred after {attempts} attempts ({reason})')
+        if reason.startswith('no safe viewpoint') and artifact_id not in self._revisited:
+            previous = self._inspection
+            self._awaiting_revisit[artifact_id] = previous.excluded + previous.tried
         self._finish_inspection()
 
     def _inspection_succeeded(self, reason: str) -> None:

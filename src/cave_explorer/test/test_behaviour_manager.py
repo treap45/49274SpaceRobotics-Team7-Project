@@ -377,6 +377,70 @@ def test_next_target_starts_right_after_one_is_deferred():
     assert [goal.pose.position.x for _, goal, _ in world.nav.sent] == [100.0]
 
 
+def exhaust(world):
+    """No frontier left; the exploration goal being driven ends."""
+    world.explorer.status = ExplorationGoalStatus.NO_REACHABLE_FRONTIER
+    world.nav.finish(world.nav.last_id, NavigationStatus.ABORTED)
+
+
+def test_no_safe_viewpoint_is_revisited_once_exploration_is_exhausted():
+    """The map round a target seen early is still unknown; the final map may hold a viewpoint."""
+    world = World(max_attempts=2)
+    world.step(tracks=[track()])
+    world.planner.assessment = InspectionEvaluation.LOST
+    arrive(world)
+    world.step(tracks=[track()])                     # attempt 1 lost at viewpoint -1
+    world.planner.assessment = InspectionEvaluation.PENDING
+    world.planner.goal_status = InspectionGoalStatus.NO_SAFE_GOAL
+    world.step(tracks=[track()])                     # attempt 2: no safe viewpoint
+    assert world.record(1).state is InspectionState.DEFERRED
+
+    world.step(tracks=[track()], seconds=10.0)       # frontiers left: still deferred
+    assert world.record(1).state is InspectionState.DEFERRED
+
+    exhaust(world)
+    world.planner.goal_status = InspectionGoalStatus.READY
+    world.step(tracks=[track()], seconds=10.0)
+    assert world.record(1).state is InspectionState.UNVISITED
+    world.step(tracks=[track()])
+    assert world.manager.mode is Mode.INSPECTING
+    assert world.record(1).attempts == 1
+    assert world.planner.excluded[-1] == (-1.0,)     # still avoids the viewpoint that failed
+    world.planner.assessment = InspectionEvaluation.SATISFIED
+    world.step(tracks=[track()])
+    assert world.record(1).state is InspectionState.VISITED
+
+
+def test_revisit_happens_only_once():
+    world = World(max_attempts=1)
+    world.planner.goal_status = InspectionGoalStatus.NO_SAFE_GOAL
+    world.step(tracks=[track()])
+    exhaust(world)
+    world.step(tracks=[track()], seconds=10.0)       # put back
+    world.step(tracks=[track()])                     # fails again at once
+    assert world.record(1).state is InspectionState.DEFERRED
+    for _ in range(5):
+        world.step(tracks=[track()], seconds=10.0)
+    assert world.record(1).state is InspectionState.DEFERRED
+    assert world.manager.mode is Mode.EXHAUSTED
+    assert sum('looking again' in line for line in world.log) == 1
+
+
+def test_other_deferrals_are_not_revisited():
+    world = World(max_attempts=1)
+    world.step(tracks=[track()])
+    world.planner.assessment = InspectionEvaluation.LOST
+    arrive(world)
+    world.step(tracks=[track()])
+    world.planner.assessment = InspectionEvaluation.PENDING
+    assert world.record(1).state is InspectionState.DEFERRED
+    exhaust(world)
+    for _ in range(3):
+        world.step(tracks=[track()], seconds=10.0)
+    assert world.record(1).state is InspectionState.DEFERRED
+    assert world.manager.mode is Mode.EXHAUSTED
+
+
 def test_records_are_a_read_only_snapshot():
     world = World()
     world.step(tracks=[track()])

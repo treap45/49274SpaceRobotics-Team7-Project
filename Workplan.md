@@ -214,6 +214,8 @@ UNVISITED → IN_PROGRESS → VISITED
 
 **`DEFERRED` 是本次运行的终态，不再重新启用。** 作业 Planning 3 原文为「if still unsuccessful, abandon the attempt and return to exploration」，永久放弃符合要求。这样实现最简单，且不存在无限重试风险。「冷却后重试」留作报告里 Planning 3 要求的「如果有更多时间会如何提升鲁棒性」。
 
+**例外（2026-10-12 加入）：** 因为「找不到安全视点」（`NO_SAFE_GOAL`）而 `DEFERRED` 的目标，在探索 EXHAUSTED（地图已建完）后**再给一轮** `max_attempts`。视点是在地图上判断的，探索早期目标周围常有未知格；仿真中一个贴墙的 green_crystals 因 16 个候选里 8 个 "not free" 被放弃，而在最终地图上有可行视点。重试时仍排除已试过的视点，每个目标最多一次，不会无限循环。其他原因（LOST、never satisfied）的暂缓不重试：这些多为误检，回去只浪费时间。
+
 ## 5. ROS 接入与现有模板注意点
 
 | 接口 | 当前情况 | 接入责任 |

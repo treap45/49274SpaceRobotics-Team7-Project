@@ -7,7 +7,10 @@ Contract: repository-root Workplan.md, section 4.4.
 an artefact with a measured width (``size_of``, from ``ArtifactTracker``) is
 viewed from outside its keep-out disk, ``keep_out_margin_m`` beyond its edge.
 Candidates go round the artefact, starting on the side facing the robot, then
-at a larger stand-off. A candidate is kept only if its cell is known free, it
+at a larger stand-off. The eight 45 deg bearings come first; the bearings half
+way between them are tried only after those, for an artefact against a cave
+wall, where half the ring is rock: in simulation a green_crystals against the
+wall had every 45 deg candidate rejected. A candidate is kept only if its cell is known free, it
 has ``clearance_m`` to every occupied cell (robot radius 0.5 m plus margin) and
 the camera has a line of sight to the artefact. Nav2 plans on an inflated
 costmap rather than this grid, so a pose that passes here can still be
@@ -64,7 +67,8 @@ class InspectionPlanner:
         sighting_window_sec: float = 15.0,
         clearance_m: float = 0.6,
         exclude_angle_deg: float = 30.0,
-        bearing_offsets_deg: tuple = (0, 45, -45, 90, -90, 135, -135, 180),
+        bearing_offsets_deg: tuple = (0, 45, -45, 90, -90, 135, -135, 180,
+                                      22.5, -22.5, 67.5, -67.5, 112.5, -112.5, 157.5, -157.5),
         extra_stand_off_m: tuple = (0.0, 0.5),
         keep_out_margin_m: float = 1.0,
         size_of=None,
