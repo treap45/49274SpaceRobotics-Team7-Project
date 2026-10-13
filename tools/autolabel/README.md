@@ -1,7 +1,9 @@
 # Simulator-labelled detector dataset
 
 Tools that built, checked and evaluated `src/cave_explorer/models/artifact_yolov8n_autolabel.pt`.
-Images, labels and training runs live in `datasets/autolabel/` (git-ignored).
+The frames actually used (thinned and reviewed: train 1207, val 331, test 311) are
+in `src/artifact_dataset/`. Everything collected, and training runs, live in
+`datasets/autolabel/` (git-ignored).
 
 Labels come from Gazebo, not from hand-drawn boxes: during collection only, the
 robot carries a bounding-box camera and a semantic segmentation camera with the

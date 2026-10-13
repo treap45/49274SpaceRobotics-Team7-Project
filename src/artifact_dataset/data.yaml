@@ -1,0 +1,10 @@
+# Pass this file by absolute path: ultralytics then resolves the folders next to it.
+train: images/train
+val: images/val
+test: images/test
+names:
+  0: white_sphere
+  1: blue_mushrooms
+  2: green_alien
+  3: ice_formation
+  4: green_crystals
