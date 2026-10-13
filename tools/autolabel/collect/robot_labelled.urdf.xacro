@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<!-- The robot plus a bounding-box camera matching rgbd_camera, for collecting labelled training data only. -->
+<robot name="mars_explorer" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:include filename="$(find cave_explorer)/urdf/mars_explorer.urdf.xacro"/>
+  <gazebo reference="camera_link">
+    <sensor name="boundingbox_camera" type="boundingbox_camera">
+      <camera>
+        <box_type>2d</box_type>
+        <horizontal_fov>2.0944</horizontal_fov>
+        <image>
+          <width>720</width>
+          <height>480</height>
+        </image>
+        <clip>
+          <near>0.1</near>
+          <far>40</far>
+        </clip>
+      </camera>
+      <always_on>1</always_on>
+      <update_rate>3</update_rate>
+      <topic>/model/mars_explorer/boxes</topic>
+      <gz_frame_id>camera_link</gz_frame_id>
+    </sensor>
+    <sensor name="segmentation_camera" type="segmentation">
+      <camera>
+        <segmentation_type>semantic</segmentation_type>
+        <horizontal_fov>2.0944</horizontal_fov>
+        <image>
+          <width>720</width>
+          <height>480</height>
+        </image>
+        <clip>
+          <near>0.1</near>
+          <far>40</far>
+        </clip>
+      </camera>
+      <always_on>1</always_on>
+      <update_rate>3</update_rate>
+      <topic>/model/mars_explorer/segmentation</topic>
+      <gz_frame_id>camera_link</gz_frame_id>
+    </sensor>
+  </gazebo>
+</robot>
