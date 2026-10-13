@@ -105,9 +105,12 @@ class CaveExplorer(Node):
         self.declare_parameter('inspect_classes', ['green_crystals', 'white_sphere'])
         self.declare_parameter('detection_confidence', 0.5)
         self.declare_parameter('detector_model', '')
-        # Channel order the YOLO model expects. A trained it on RGB arrays
-        # (confirmed), although ultralytics assumes BGR for numpy input.
-        self.declare_parameter('detector_input_bgr', False)
+        # Channel order the YOLO model expects. The default model was trained on
+        # images saved with OpenCV, so it takes BGR as ultralytics assumes. The
+        # earlier models/artifact_yolov8n.pt was trained on channel-swapped
+        # images and needs False: given BGR it saw the orange cave walls as
+        # ice_formation in simulation (and the new model given RGB did too).
+        self.declare_parameter('detector_input_bgr', True)
         self.declare_parameter('depth_sync_tolerance_sec', 0.05)
 
         inspect_classes = frozenset(self.get_parameter('inspect_classes').value)

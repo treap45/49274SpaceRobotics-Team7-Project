@@ -27,11 +27,13 @@ class Detector:
         confidence_threshold: float = 0.15,
     ):
         if model_path is None:
+            # Retrained on simulator-labelled images (datasets/autolabel); the
+            # earlier hand-collected model is models/artifact_yolov8n.pt.
             package_share = get_package_share_directory('cave_explorer')
             model_path = (
                 Path(package_share)
                 / 'models'
-                / 'artifact_yolov8n.pt'
+                / 'artifact_yolov8n_autolabel.pt'
             )
 
         self.model_path = Path(model_path).expanduser().resolve()

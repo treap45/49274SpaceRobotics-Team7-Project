@@ -25,10 +25,22 @@ def generate_launch_description():
         package='cave_explorer',
         executable='cave_explorer',
         output='screen',
-        parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time')}]
+        parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time'),
+                     'detector_model': LaunchConfiguration('detector_model'),
+                     'detector_input_bgr': LaunchConfiguration('detector_input_bgr')}]
     )
 
     ld.add_action(use_sim_time_launch_arg)
+    ld.add_action(DeclareLaunchArgument(
+        'detector_model',
+        default_value='',
+        description='YOLO weights; empty uses models/artifact_yolov8n_autolabel.pt'
+    ))
+    ld.add_action(DeclareLaunchArgument(
+        'detector_input_bgr',
+        default_value='true',
+        description='false for models/artifact_yolov8n.pt (trained on channel-swapped images)'
+    ))
     ld.add_action(DeclareLaunchArgument(
         'roadmap_record_path',
         default_value='',

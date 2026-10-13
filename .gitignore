@@ -37,6 +37,7 @@ rosbags/
 *.mcap
 *.mp4
 *.pt
+!src/cave_explorer/models/*.pt
 *.pth
 *.onnx
 *.weights
