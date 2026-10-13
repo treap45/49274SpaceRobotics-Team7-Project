@@ -64,7 +64,7 @@ class CoverageExplorer:
     """Remembers what the camera has seen and picks goals to see the rest."""
 
     def __init__(self, *,
-                 view_range_m: float = 6.0,
+                 view_range_m: float = 9.0,
                  fov_rad: float = 2.0944,
                  min_region_m2: float = 2.0,
                  min_clearance_m: float = 0.7,
@@ -75,7 +75,11 @@ class CoverageExplorer:
                  penalty_radius_m: float = 1.5,
                  start_search_m: float = 1.0):
         """``view_range_m`` is how far the camera is trusted to spot an
-        artefact, well inside the 10 m depth limit. ``fov_rad`` is the camera's
+        artefact and the tracker to place it: 1 m inside the 10 m depth limit,
+        beyond which a detection cannot be localised. Replaying a recorded run,
+        the detector found every visible artefact of every class in every
+        frame out to 10 m (white_sphere, the first to drop, 94% at 10-12 m).
+        It was 6 m for the earlier detector. ``fov_rad`` is the camera's
         horizontal field of view (Workplan 5.1). ``min_clearance_m`` matches
         FrontierExplorer: robot radius 0.5 m plus margin. ``goal_search_m``
         bounds how far from a region's nearest cell a clear goal may be. A goal
