@@ -44,6 +44,11 @@ Rules carried over from Workplan.md:
   and back away; it returns how many seconds to wait before the next goal.
 * A Nav2 rejection moves on to another viewpoint, excluding the ones already
   tried; it does not by itself use up an attempt (4.4).
+* An attempt has ``attempt_timeout_sec`` plus the travel to its first
+  viewpoint at ``approach_speed_mps`` (about half the robot's cruising speed,
+  for detours). A plain 60 s was enough when an inspection began next to the
+  artefact, but a revisit starts wherever exploration ended: in simulation the
+  robot was 37 m away and still 15 m short when 60 s ran out.
 * ``DEFERRED`` is terminal for the run (4.6), with one exception: an artefact
   deferred because the planner found no safe viewpoint gets one more round of
   ``max_attempts`` once exploration is exhausted and the map is as complete as
@@ -54,6 +59,11 @@ Rules carried over from Workplan.md:
   happens once per artefact, so it cannot loop. Deferrals for other reasons
   (lost, never satisfied) are not revisited: those were mostly false
   detections, and driving back to them costs time for nothing.
+* When the tracker merges two tracks of one artefact it retires the newer id;
+  ``merge_records`` carries that record over to the surviving id: an artefact
+  inspected under either id counts as inspected, and an inspection under way
+  continues under the surviving id. Without this the robot inspected the same
+  green_crystals three or four times through its duplicate tracks.
 * Goals are switched by sending the new goal, never cancel-then-send:
   navigation_client explains why, and reports the preempted goal as
   ``CANCELED`` so nothing gets penalised for it.
@@ -127,7 +137,8 @@ class BehaviourConfig:
     inspect_classes: frozenset = frozenset()
     max_attempts: int = 2               # the first try plus one retry
     max_viewpoints: int = 3             # per attempt, after Nav2 rejections
-    attempt_timeout_sec: float = 60.0   # one approach, start to finish
+    attempt_timeout_sec: float = 60.0   # one approach, start to finish, plus travel:
+    approach_speed_mps: float = 0.3     # travel allowance = distance to the viewpoint / this
     dwell_timeout_sec: float = 10.0     # arrived, waiting for SATISFIED
     explore_goal_timeout_sec: float = 120.0
     replan_period_sec: float = 4.0      # SLAM republishes the map every 2 s
@@ -159,6 +170,7 @@ class _Inspection:
     excluded: list = field(default_factory=list)    # viewpoints of earlier attempts
     request_id: int | None = None
     arrived_ns: int | None = None
+    deadline_ns: int | None = None                  # set with the attempt's first viewpoint
 
 
 class BehaviourManager:
@@ -195,6 +207,32 @@ class BehaviourManager:
     def records(self) -> tuple[InspectionRecord, ...]:
         """Read-only snapshot of every inspection record, for B's markers (Workplan 4.6)."""
         return tuple(self._records[key] for key in sorted(self._records))
+
+    def merge_records(self, retired_id: int, kept_id: int) -> None:
+        """The tracker merged ``retired_id`` into ``kept_id``: carry its record over."""
+        retired = self._records.pop(retired_id, None)
+        self._awaiting_revisit.pop(retired_id, None)
+        self._revisit_excluded.pop(retired_id, None)
+        if retired is None:
+            return      # not a class we inspect
+        kept = self._records.get(kept_id)
+        kept_visited = kept is not None and kept.state is InspectionState.VISITED
+        inspection = self._inspection
+        if inspection is not None and inspection.artifact_id == retired_id:
+            if kept_visited:
+                self._log(f'artefact {retired_id} is artefact {kept_id}, already inspected')
+                self._finish_inspection()
+            else:
+                inspection.artifact_id = kept_id
+                self._set_record(kept_id, retired.state, retired.attempts,
+                                 retired.last_failure_reason)
+                self._log(f'artefact {retired_id} is artefact {kept_id}; inspecting it as {kept_id}')
+            return
+        if retired.state is InspectionState.VISITED and not kept_visited:
+            if inspection is not None and inspection.artifact_id == kept_id:
+                self._finish_inspection()
+            self._set_record(kept_id, InspectionState.VISITED, retired.attempts)
+            self._log(f'artefact {retired_id} is artefact {kept_id}, already inspected')
 
     def step(self, now_ns: int, robot_pose, map_msg,
              tracks: Sequence[ArtifactTrack] = ()) -> None:
@@ -370,9 +408,12 @@ class BehaviourManager:
         if track is None:
             self._attempt_failed(now_ns, 'artefact no longer reported by the tracker')
             return
-        if now_ns - inspection.started_ns > self.config.attempt_timeout_sec * 1e9:
+        deadline_ns = inspection.deadline_ns or \
+            inspection.started_ns + int(self.config.attempt_timeout_sec * 1e9)
+        if now_ns > deadline_ns:
             self._attempt_failed(
-                now_ns, f'not inspected within {self.config.attempt_timeout_sec:g} s')
+                now_ns, 'not inspected within '
+                f'{(deadline_ns - inspection.started_ns) / 1e9:.0f} s')
             return
 
         assessment = self._planner.evaluate(track, robot_pose, now_ns)
@@ -427,7 +468,13 @@ class BehaviourManager:
             self._attempt_failed(now_ns, f'no safe viewpoint: {plan.reason}')
             return
         inspection.tried.append(plan.goal)
-        inspection.request_id = self._send(plan.goal, self.config.attempt_timeout_sec)
+        if inspection.deadline_ns is None:
+            travel_sec = math.dist((robot_pose.x, robot_pose.y), _xy(plan.goal)) \
+                / self.config.approach_speed_mps
+            inspection.deadline_ns = inspection.started_ns + int(
+                (self.config.attempt_timeout_sec + travel_sec) * 1e9)
+        inspection.request_id = self._send(
+            plan.goal, (inspection.deadline_ns - now_ns) / 1e9)
 
     def _attempt_failed(self, now_ns, reason: str) -> None:
         artifact_id = self._inspection.artifact_id

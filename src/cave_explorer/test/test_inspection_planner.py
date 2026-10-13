@@ -172,6 +172,18 @@ def test_line_of_sight_through_a_wall_is_rejected():
     assert plan.status is InspectionGoalStatus.NO_SAFE_GOAL
 
 
+def test_an_artefacts_own_body_does_not_block_the_view_of_it():
+    """A 3 m wide artefact placed at its centre: its outline is occupied 1.5 m round it."""
+    cells = open_room()
+    rows, cols = np.mgrid[0:100, 0:100]
+    r = np.hypot((cols + 0.5) * RESOLUTION - 5.0, (rows + 0.5) * RESOLUTION - 5.0)
+    cells[(r > 1.3) & (r < 1.5)] = 100                 # ring of lidar returns round the body
+    planner = InspectionPlanner(size_of=lambda artifact_id: 3.0)
+    plan = planner.make_goal(track(), robot(-4.0, 0.0), make_map(cells))
+    assert plan.status is InspectionGoalStatus.READY
+    assert math.dist(xy(plan.goal), (0.0, 0.0)) == pytest.approx(2.5, abs=1e-6)
+
+
 def test_no_map_is_not_ready():
     plan = InspectionPlanner().make_goal(track(), robot(0.0, 0.0), None)
     assert plan.status is InspectionGoalStatus.NOT_READY

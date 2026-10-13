@@ -350,11 +350,26 @@ def test_no_safe_viewpoint_fails_the_attempt():
 
 
 def test_attempt_times_out():
-    world = World(attempt_timeout_sec=60.0, max_attempts=1)
+    """60 s plus the travel to a viewpoint 1 m away at 0.3 m/s."""
+    world = World(attempt_timeout_sec=60.0, approach_speed_mps=0.3, max_attempts=1)
     world.step(tracks=[track()])
-    world.step(tracks=[track()], seconds=61.0)
+    world.step(tracks=[track()], seconds=62.0)
+    assert world.record(1).state is InspectionState.IN_PROGRESS
+    world.step(tracks=[track()], seconds=2.0)
     assert world.record(1).state is InspectionState.DEFERRED
-    assert 'within 60 s' in world.record(1).last_failure_reason
+    assert 'within 63 s' in world.record(1).last_failure_reason
+
+
+def test_far_viewpoint_gets_time_to_drive_there():
+    """A revisit can start 40 m away: 60 s alone ran out on the way."""
+    world = World(attempt_timeout_sec=60.0, approach_speed_mps=0.3, max_attempts=1)
+    world.robot = SimpleNamespace(x=39.0, y=0.0)        # viewpoint at x = -1: 40 m away
+    world.step(tracks=[track()])
+    world.step(tracks=[track()], seconds=120.0)
+    assert world.record(1).state is InspectionState.IN_PROGRESS
+    world.step(tracks=[track()], seconds=80.0)
+    assert world.record(1).state is InspectionState.DEFERRED
+    assert 'within 193 s' in world.record(1).last_failure_reason
 
 
 def test_target_dropped_by_the_tracker_fails_the_attempt():
@@ -603,3 +618,72 @@ def test_stuck_on_the_way_to_a_viewpoint_also_recovers():
     for _ in range(6):
         world.step(tracks=[track()], seconds=5.0)
     assert len(calls) == 1 and world.nav.cancelled
+
+
+# ----------------------------------------------------------------------
+# Tracker merges: a retired id's record carries over to the surviving id
+# ----------------------------------------------------------------------
+
+def test_merge_of_an_inspected_duplicate_marks_the_survivor_inspected():
+    world = World()
+    world.step(tracks=[track(2, x=5.0)])                 # the duplicate is inspected first
+    world.planner.assessment = InspectionEvaluation.SATISFIED
+    world.step(tracks=[track(2, x=5.0)])
+    assert world.record(2).state is InspectionState.VISITED
+    world.planner.assessment = InspectionEvaluation.PENDING
+
+    world.manager.merge_records(2, 1)                    # tracker: 2 was artefact 1 all along
+    world.step(tracks=[track(1, x=5.0)])
+    assert world.record(1).state is InspectionState.VISITED
+    assert all(r.artifact_id != 2 for r in world.manager.records)
+    assert world.manager.mode is Mode.EXPLORING          # not inspected a second time
+
+
+def test_inspection_under_way_continues_under_the_surviving_id():
+    world = World()
+    world.step(tracks=[track(2, x=5.0)])
+    assert world.manager.mode is Mode.INSPECTING
+    sent = len(world.nav.sent)
+
+    world.manager.merge_records(2, 1)
+    world.step(tracks=[track(1, x=5.0)])
+    assert world.manager.mode is Mode.INSPECTING
+    assert world.record(1).state is InspectionState.IN_PROGRESS
+    assert len(world.nav.sent) == sent                   # same viewpoint goal, not restarted
+    world.planner.assessment = InspectionEvaluation.SATISFIED
+    world.step(tracks=[track(1, x=5.0)])
+    assert world.record(1).state is InspectionState.VISITED
+
+
+def test_inspecting_the_survivor_stops_when_its_duplicate_was_inspected():
+    world = World()
+    world.step(tracks=[track(2, x=2.0)])
+    world.planner.assessment = InspectionEvaluation.SATISFIED
+    world.step(tracks=[track(2, x=2.0)])
+    world.planner.assessment = InspectionEvaluation.PENDING
+    world.step(tracks=[track(2, x=2.0), track(1, x=6.0)])
+    assert world.manager.mode is Mode.INSPECTING         # now inspecting 1, a duplicate of 2
+
+    world.manager.merge_records(2, 1)
+    assert world.record(1).state is InspectionState.VISITED
+    assert world.manager.mode is Mode.EXPLORING
+
+
+def test_merge_into_an_inspected_survivor_ends_the_inspection():
+    world = World()
+    world.step(tracks=[track(1, x=2.0)])
+    world.planner.assessment = InspectionEvaluation.SATISFIED
+    world.step(tracks=[track(1, x=2.0)])
+    world.planner.assessment = InspectionEvaluation.PENDING
+    world.step(tracks=[track(1, x=2.0), track(2, x=6.0)])
+    assert world.manager.mode is Mode.INSPECTING         # inspecting 2
+
+    world.manager.merge_records(2, 1)
+    assert world.manager.mode is Mode.EXPLORING
+    assert world.record(1).state is InspectionState.VISITED
+
+
+def test_merge_of_an_ignored_class_changes_nothing():
+    world = World()
+    world.manager.merge_records(7, 3)
+    assert world.manager.records == ()

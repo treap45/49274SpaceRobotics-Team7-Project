@@ -254,6 +254,9 @@ class CaveExplorer(Node):
 
         self.pending_batch_ = None
         self.tracker_.update(batch, depth, SIM_CAMERA_MODEL, transform)
+        for retired_id, kept_id in self.tracker_.last_merges:
+            self.get_logger().info(f'artefact {retired_id} merged into artefact {kept_id}')
+            self.manager_.merge_records(retired_id, kept_id)
         self.obstacles_.add(batch, depth, SIM_CAMERA_MODEL, transform)
         for reason in self.tracker_.last_rejections:
             self.get_logger().info(f'Detection not localised: {reason}',

@@ -10,9 +10,10 @@ Candidates go round the artefact, starting on the side facing the robot, then
 at a larger stand-off. The eight 45 deg bearings come first; the bearings half
 way between them are tried only after those, for an artefact against a cave
 wall, where half the ring is rock: in simulation a green_crystals against the
-wall had every 45 deg candidate rejected. A candidate is kept only if its cell is known free, it
-has ``clearance_m`` to every occupied cell (robot radius 0.5 m plus margin) and
-the camera has a line of sight to the artefact. Nav2 plans on an inflated
+wall had every 45 deg candidate rejected. A candidate is kept only if its
+cell is known free, it has ``clearance_m`` to every occupied cell (robot
+radius 0.5 m plus margin) and the camera has a line of sight to the
+artefact's edge (its keep-out radius). Nav2 plans on an inflated
 costmap rather than this grid, so a pose that passes here can still be
 rejected; ``exclude`` lists poses already tried so the next call returns a
 different one (Workplan 4.4). A candidate within ``exclude_angle_deg`` of a
@@ -137,6 +138,12 @@ class InspectionPlanner:
                     'no line of sight': 0}
 
         base = self.stand_off_for(track)
+        # The artefact's own body must not block the view of it: the line of
+        # sight ends at its keep-out radius. Since the tracker places a wide
+        # artefact at its centre, a 0.4 m stop put a green_crystals' own lidar
+        # returns between every candidate and its centre.
+        keep_out = keep_out_radius_m(self.size_of(track.artifact_id)) if self.size_of else None
+        stop_short = max(0.4, keep_out or 0.0)
         for stand_off in (base + extra for extra in self.extra_stand_off_m):
             for offset in self.bearing_offsets:
                 bearing = toward_robot + offset
@@ -148,7 +155,7 @@ class InspectionPlanner:
                     rejected['not free'] += 1
                 elif clearance[grid.cell(gx, gy)] < self.clearance_m:
                     rejected['too close to a wall'] += 1
-                elif not grid.line_of_sight(gx, gy, ax, ay):
+                elif not grid.line_of_sight(gx, gy, ax, ay, stop_short_m=stop_short):
                     rejected['no line of sight'] += 1
                 else:
                     return InspectionGoal(

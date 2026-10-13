@@ -18,9 +18,17 @@ into three tracks 1.7 m apart with a fixed 1.0 m radius), a small one does not.
 
 Tracks stay provisional and internal until they have ``confirm_count``
 observations. Only then do they get an ``artifact_id`` and appear in
-``snapshot()``, so all merging happens before an id exists and an id never
-changes afterwards (Workplan 4.3). A single bad-depth observation therefore
-never reaches C.
+``snapshot()``. A single bad-depth observation therefore never reaches C.
+
+Merging: early observations of a large artefact are spread and its width is
+not yet known, so the gate is small and a second track can be confirmed for
+the same artefact; as both means converge they end up within each other's
+gate. After every update, two tracks of the same class within the gate are
+merged (observation-weighted). The older id survives; the newer one is
+retired, never reused, and reported in ``last_merges`` so C can carry its
+inspection record over (Workplan 4.3: an id never changes, but may retire).
+In simulation this cut duplicate tracks from 7 to 1 in a run that found all 15
+artefacts.
 
 Depth (Workplan 4.3 item 2, 5.1): the depth image is the same 720 x 480 sensor
 as the RGB image, so a bbox indexes it directly. Valid depths in the central
@@ -28,6 +36,18 @@ half of the box are split into depth bands. The nearest supported band supplies
 both depth and pixel coordinates, keeping wall depth off the object ray.
 Readings outside the 0.4-10 m depth clip are invalid; a detection with too few
 valid pixels is skipped with a reason rather than placed at a clipped depth.
+
+Surface to centre: that pixel is on the artefact's near surface, about half the
+artefact's depth short of its centre, so wide artefacts were placed towards
+the robot and estimates from opposite sides fell a width apart (1.0-1.7 m for
+green_crystals and ice_formation in simulation). With ``surface_to_centre``
+the point moves further along the horizontal viewing ray by half the visible
+width of the near surface: the lateral extent of the pixels in the box within
+one depth band of the selected depth. That stands in for the unseen depth
+extent and is measured, not assumed per class: a sphere moves by its radius,
+a thin green_alien seen face-on by little (half the bbox width overshot it by
+1 m). Replaying a recorded run, median errors fell to 0.3-0.7 m (ice_formation
+1.6 m: its 5 x 5 m base has no clear centre).
 
 Frames (Workplan 5): unprojection gives a point in the camera *optical* frame
 (z forward, x right, y down). ``transform_at_stamp`` must therefore be
@@ -94,6 +114,7 @@ class ArtifactTracker:
         provisional_timeout_sec: float = 60.0,
         depth_band_width_m: float = 0.3,
         min_foreground_fraction: float = 0.05,
+        surface_to_centre: bool = True,
     ):
         """``min_match_radius_m`` and ``match_width_factor`` set the association
         gate from the measured artefact width (see the module docstring).
@@ -111,12 +132,15 @@ class ArtifactTracker:
         self.width_history = width_history
         self.min_valid_depth_fraction = min_valid_depth_fraction
         self.provisional_timeout_ns = int(provisional_timeout_sec * 1e9)
+        self.surface_to_centre = surface_to_centre
 
         self._tracks: List[_Track] = []
         self._next_artifact_id = 1
         self._latest_stamp_ns: Optional[int] = None
         # Why each detection of the last batch was skipped, for logging.
         self.last_rejections: List[str] = []
+        # (retired_id, surviving_id) for every merge since the last ``update``.
+        self.last_merges: List[tuple] = []
 
     def reset(self) -> None:
         """Forget every track, e.g. after the simulation was reset."""
@@ -124,6 +148,7 @@ class ArtifactTracker:
         self._next_artifact_id = 1
         self._latest_stamp_ns = None
         self.last_rejections = []
+        self.last_merges = []
 
     def size_m(self, artifact_id: int) -> Optional[float]:
         """Measured width of a confirmed artefact, or None if unknown."""
@@ -158,6 +183,7 @@ class ArtifactTracker:
             self.reset()
         self._latest_stamp_ns = stamp_ns
         self.last_rejections = []
+        self.last_merges = []
 
         transform = self._as_transform_dict(transform_at_stamp)
         depth = np.asarray(matched_depth, dtype=np.float32)
@@ -169,6 +195,10 @@ class ArtifactTracker:
                 continue
             depth_m, u, v = sample
             point_camera = self._pixel_to_camera(u, v, depth_m, camera_model)
+            if self.surface_to_centre:
+                point_camera = self._behind_surface(
+                    point_camera,
+                    self._surface_width_m(depth, detection.bbox_xyxy, depth_m, camera_model) / 2.0)
             position_map = self._transform_point(point_camera, transform)
             x_min, _, x_max, _ = detection.bbox_xyxy
             width_m = (x_max - x_min) * depth_m / self._camera_value(camera_model, 'fx')
@@ -203,6 +233,7 @@ class ArtifactTracker:
 
         if track.artifact_id is None and track.observation_count >= self.confirm_count:
             track.artifact_id = self._allocate_id()
+        self._merge_converged()
         return track.public() if track.artifact_id is not None else None
 
     def _allocate_id(self) -> int:
@@ -227,6 +258,64 @@ class ArtifactTracker:
                 best_distance = distance
                 best_track = track
         return best_track
+
+    def _merge_converged(self) -> None:
+        """Merge same-class tracks that have converged within the gate; the older survives."""
+        def age(track):     # confirmed before provisional, then lower id, then more observations
+            return (track.artifact_id is None, track.artifact_id or 0, -track.observation_count)
+
+        merged = True
+        while merged:
+            merged = False
+            for i, a in enumerate(self._tracks):
+                for b in self._tracks[i + 1:]:
+                    if a.class_name != b.class_name:
+                        continue
+                    keep, drop = (a, b) if age(a) <= age(b) else (b, a)
+                    if math.dist(keep.position_map, drop.position_map) > \
+                            self._gate_m(keep, drop.width()):
+                        continue
+                    n, m = keep.observation_count, drop.observation_count
+                    keep.position_map = tuple((p * n + q * m) / (n + m)
+                                              for p, q in zip(keep.position_map, drop.position_map))
+                    keep.observation_count = n + m
+                    keep.last_seen_ns = max(keep.last_seen_ns, drop.last_seen_ns)
+                    keep.widths = (keep.widths + drop.widths)[-self.width_history:]
+                    if keep.artifact_id is None and keep.observation_count >= self.confirm_count:
+                        keep.artifact_id = self._allocate_id()
+                    if drop.artifact_id is not None:
+                        self.last_merges.append((drop.artifact_id, keep.artifact_id))
+                    self._tracks.remove(drop)
+                    merged = True
+                    break
+                if merged:
+                    break
+
+    def _surface_width_m(self, depth, bbox_xyxy, depth_m, camera_model) -> float:
+        """Lateral extent (m) of the box's pixels within one depth band of ``depth_m``.
+
+        The 5th-95th percentile of their columns, so a few stray pixels at the
+        same depth (floor, a wall edge) do not widen it.
+        """
+        height, width = depth.shape[:2]
+        x_min, y_min, x_max, y_max = bbox_xyxy
+        window = depth[max(0, int(math.floor(y_min))):min(height, int(math.ceil(y_max))),
+                       max(0, int(math.floor(x_min))):min(width, int(math.ceil(x_max)))]
+        with np.errstate(invalid='ignore'):
+            cols = np.nonzero(np.abs(window - depth_m) <= self.depth_band_width_m)[1]
+        if cols.size < 4:
+            return 0.0
+        low, high = np.percentile(cols, [5, 95])
+        return float(high - low) * depth_m / self._camera_value(camera_model, 'fx')
+
+    @staticmethod
+    def _behind_surface(point_camera, distance_m: float):
+        """Move a camera-frame point ``distance_m`` further along its horizontal viewing ray."""
+        x, y, z = point_camera
+        norm = math.hypot(x, z)
+        if distance_m <= 0.0 or norm == 0.0:
+            return point_camera
+        return (x + x / norm * distance_m, y, z + z / norm * distance_m)
 
     def _drop_stale_provisional(self, now_ns: int) -> None:
         self._tracks = [
