@@ -1,10 +1,10 @@
 #!/bin/bash
-# usage: [BGR=true|false] [FRAMES=1] eval_batch.sh <model.pt> <out_dir> <name> <runs>
+# usage: [BGR=true|false] [FRAMES=1] [EXPLORATION=two_phase|interleaved|information_gain|info_tour] eval_batch.sh <model.pt> <out_dir> <name> <runs>
 # Runs the full autonomy <runs> times, each until EXHAUSTED or 18 min, and scores it.
 H=$(dirname "$(readlink -f "$0")"); MODEL=$1; O=$2; N=$3; K=$4
 for i in $(seq 1 $K); do
   D=$O/${N}_run$i
-  MODEL=$MODEL BGR=${BGR:-true} FRAMES=${FRAMES:-} setsid bash $H/run.sh $D < /dev/null > /dev/null 2>&1 &
+  MODEL=$MODEL BGR=${BGR:-true} FRAMES=${FRAMES:-} EXPLORATION=${EXPLORATION:-info_tour} setsid bash $H/run.sh $D < /dev/null > /dev/null 2>&1 &
   start=$(date +%s)
   while [ $(( $(date +%s) - start )) -lt 1080 ]; do
     grep -qE "EXHAUSTED|Traceback" $D/autonomy.log 2>/dev/null && break; sleep 10
