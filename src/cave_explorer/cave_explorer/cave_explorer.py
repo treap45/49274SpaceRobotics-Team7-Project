@@ -50,6 +50,7 @@ from cave_explorer.frontier_explorer import FrontierExplorer, frontier_markers
 from cave_explorer.inspection_planner import InspectionPlanner
 from cave_explorer.interfaces import ARTIFACT_CLASSES, InspectionState
 from cave_explorer.navigation_client import NavigationClient
+from cave_explorer.nbv_explorer import InformationGainExplorer, InformationTourExplorer
 
 MAP_FRAME = 'map'
 ROBOT_FRAME = 'base_link'
@@ -65,6 +66,7 @@ BACKOFF_SEC = 3.0
 PLAN_FRESH_SEC = 15.0
 # camera_joint in mars_explorer.urdf.xacro: the camera is 0.5 m ahead of base_link.
 CAMERA_FORWARD_M = 0.5
+EXPLORATION_MODES = ('two_phase', 'interleaved', 'information_gain', 'info_tour')
 
 # A detection batch waits this long for its depth image and camera TF.
 PENDING_TIMEOUT_NS = 1_000_000_000
@@ -112,6 +114,12 @@ class CaveExplorer(Node):
         # ice_formation in simulation (and the new model given RGB did too).
         self.declare_parameter('detector_input_bgr', True)
         self.declare_parameter('depth_sync_tolerance_sec', 0.05)
+        # two_phase: frontiers until the map is done, then camera coverage.
+        # interleaved: unseen regions compete with frontiers from the start
+        # (TwoPhaseExplorer). information_gain: next-best-view on the camera's
+        # expected view (InformationGainExplorer). info_tour: shortest route
+        # through every frontier and unseen cluster (InformationTourExplorer).
+        self.declare_parameter('exploration_mode', 'info_tour')
 
         inspect_classes = frozenset(self.get_parameter('inspect_classes').value)
         self.inspect_classes_ = inspect_classes
@@ -137,8 +145,24 @@ class CaveExplorer(Node):
         # Planning (C, with B's inspection planner)
         self.goal_pub_ = self.create_publisher(PoseStamped, 'exploration_goal', 1)
         self.navigation_ = NavigationClient(self)
-        self.coverage_ = CoverageExplorer()
-        self.explorer_ = TwoPhaseExplorer(FrontierExplorer(), self.coverage_)
+        mode = self.get_parameter('exploration_mode').value
+        if mode not in EXPLORATION_MODES:
+            raise ValueError(f'exploration_mode {mode!r} is not one of {EXPLORATION_MODES}')
+        interleave = mode == 'interleaved'
+        # Interleaved, both gains are capped at what one stop shows the camera:
+        # its view sector (85 m2) of a region, its chord (15.6 m) of a frontier.
+        # Uncapped, a 135 m frontier outbid an unseen room beside the robot by 40 m.
+        view = CoverageExplorer()
+        sector_m2 = 0.5 * view.fov_rad * view.view_range_m ** 2
+        chord_m = 2.0 * view.view_range_m * math.sin(view.fov_rad / 2.0)
+        self.coverage_ = CoverageExplorer(max_gain_m2=sector_m2 if interleave else math.inf)
+        self.explorer_ = TwoPhaseExplorer(
+            FrontierExplorer(max_gain_length_m=chord_m if interleave else math.inf),
+            self.coverage_, interleave=interleave)
+        if mode == 'information_gain':
+            self.explorer_ = InformationGainExplorer(self.coverage_)
+        elif mode == 'info_tour':
+            self.explorer_ = InformationTourExplorer(self.coverage_)
         self.manager_ = BehaviourManager(
             _GoalPublishingNavigator(self.navigation_, self.goal_pub_),
             self.explorer_,

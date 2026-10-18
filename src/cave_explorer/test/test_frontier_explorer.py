@@ -208,6 +208,18 @@ def test_nearer_exit_wins_and_both_are_listed(explorer):
     assert goals == [pytest.approx(LEFT_EXIT), pytest.approx(RIGHT_EXIT)]
 
 
+def test_frontier_gain_counts_at_most_max_gain_length():
+    # A 1.5 m exit beside the robot and a 2.7 m opening 4 m away. A heavy gain
+    # weight favours the long one, unless only 1.2 m of length can count.
+    rows = ['#' * 15 + '?' * 9 + '#'] + ['?' + '.' * 23 + '#'] * 2 \
+        + ['?..R' + '.' * 20 + '#'] + ['?' + '.' * 23 + '#'] * 2 + ['#' * 25]
+    grid, robot = ascii_map(rows)
+    long_first = FrontierExplorer(gain_weight=5.0).select_goal(grid, robot, 0)
+    assert goal_xy(long_first)[1] > 1.5
+    capped = FrontierExplorer(gain_weight=5.0, max_gain_length_m=1.2).select_goal(grid, robot, 0)
+    assert goal_xy(capped)[0] < 0.6
+
+
 def test_path_cost_follows_walls_not_straight_lines(explorer):
     # The opening at the top left is 1.6 m away as the crow flies, but the
     # dividing wall forces a 23-cell detour along the bottom. The right-hand

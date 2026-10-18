@@ -165,15 +165,19 @@ def test_coverage_grid_marks_unseen_free_cells():
 # --------------------------------------------------------------------------
 
 class ScriptedFrontier:
-    def __init__(self, status):
+    def __init__(self, status, cost=0.0):
         self.status = status
         self.frontiers, self.chosen, self.frame_id = ('f',), None, 'map'
+        self.cost = cost
         self.reports = []
 
     def select_goal(self, map_msg, robot_xy, now_ns):
         if self.status is ExplorationGoalStatus.READY:
             from geometry_msgs.msg import PoseStamped
+            from types import SimpleNamespace
+            self.chosen = SimpleNamespace(cost=self.cost)
             return ExplorationGoal(self.status, PoseStamped(), 'frontier')
+        self.chosen = None
         return ExplorationGoal(self.status, None, 'scripted')
 
     def report_outcome(self, goal, status, reason, now_ns):
@@ -205,6 +209,43 @@ def test_not_ready_frontier_does_not_fall_through_to_coverage():
     result = explorer.select_goal(make_map(room()), (2.5, 6.0), 0)
     assert result.status is ExplorationGoalStatus.NOT_READY
     assert explorer.active is frontier
+
+
+def test_interleaved_picks_the_cheaper_of_frontier_and_unseen_region():
+    world = make_map(room())
+    coverage = CoverageExplorer(view_range_m=6.0)
+    near = coverage.select_goal(world, (2.5, 6.0), 0)       # unseen room, cost ~ -4
+    assert near.status is ExplorationGoalStatus.READY and coverage.chosen.cost < 0
+
+    far = ScriptedFrontier(ExplorationGoalStatus.READY, cost=30.0)
+    explorer = TwoPhaseExplorer(far, CoverageExplorer(view_range_m=6.0), interleave=True)
+    result = explorer.select_goal(world, (2.5, 6.0), 0)
+    assert result.reason.startswith('coverage') and explorer.active is explorer.coverage
+    # Replanning checks the goal being driven to against both lists.
+    assert explorer.frontiers[0] == 'f' and len(explorer.frontiers) > 1
+    explorer.report_outcome(result.goal, NavigationStatus.ABORTED, '', 0)
+    assert len(explorer.coverage._failures) == 1 and far.reports == []
+
+    close = ScriptedFrontier(ExplorationGoalStatus.READY, cost=-30.0)
+    explorer = TwoPhaseExplorer(close, CoverageExplorer(view_range_m=6.0), interleave=True)
+    assert explorer.select_goal(world, (2.5, 6.0), 0).reason == 'frontier'
+
+
+def test_not_interleaved_ignores_unseen_regions_while_frontiers_remain():
+    far = ScriptedFrontier(ExplorationGoalStatus.READY, cost=30.0)
+    explorer = TwoPhaseExplorer(far, CoverageExplorer(view_range_m=6.0))
+    assert explorer.select_goal(make_map(room()), (2.5, 6.0), 0).reason == 'frontier'
+    assert explorer.frontiers == ('f',)
+
+
+def test_region_gain_is_capped_at_max_gain_m2():
+    """A huge unseen region must not outbid a nearby small one by tens of metres."""
+    view_m2 = 0.5 * 2.0944 * 6.0 ** 2
+    cov = CoverageExplorer(view_range_m=6.0, gain_per_m2=0.05, max_gain_m2=view_m2)
+    world = make_map(room(rows=80, cols=200))                 # 60 m x 24 m, all unseen
+    cov.select_goal(world, (2.5, 6.0), 0)
+    assert cov.chosen.length_m > 10 * view_m2
+    assert cov.chosen.cost == pytest.approx(cov.chosen.path_m - 0.05 * view_m2)
 
 
 @pytest.mark.parametrize('robot', [(2.5, 6.0), (27.0, 3.0)])

@@ -101,6 +101,7 @@ class FrontierExplorer:
                  min_frontier_m: float = 1.0,
                  min_clearance_m: float = 0.7,
                  gain_weight: float = 0.3,
+                 max_gain_length_m: float = math.inf,
                  visit_penalty_m: float = 8.0,
                  visit_decay_sec: float = 120.0,
                  failure_cooldown_sec: float = 90.0,
@@ -111,7 +112,8 @@ class FrontierExplorer:
         ``min_frontier_m``: frontiers shorter than this are ignored; the robot
         is 1 m wide. ``min_clearance_m``: a goal must be this far from any
         occupied cell; robot radius 0.5 m plus margin. ``gain_weight``: metres
-        of extra path accepted per metre of frontier length. ``visit_penalty_m``:
+        of extra path accepted per metre of frontier length, counting at most
+        ``max_gain_length_m`` of it (what one stop can show). ``visit_penalty_m``:
         path-length penalty near a goal reached recently, fading linearly over
         ``visit_decay_sec``. ``failure_cooldown_sec``: how long goals near a
         failed one are excluded. ``penalty_radius_m``: how near counts as the
@@ -121,6 +123,7 @@ class FrontierExplorer:
         self.min_frontier_m = min_frontier_m
         self.min_clearance_m = min_clearance_m
         self.gain_weight = gain_weight
+        self.max_gain_length_m = max_gain_length_m
         self.visit_penalty_m = visit_penalty_m
         self.visit_decay_ns = int(visit_decay_sec * 1e9)
         self.failure_cooldown_ns = int(failure_cooldown_sec * 1e9)
@@ -233,7 +236,8 @@ class FrontierExplorer:
         if self._near_failure(goal):
             return rejected('failed_recently', goal, path_m)
 
-        cost = path_m - self.gain_weight * length_m + self._visit_penalty(goal, now_ns)
+        cost = (path_m - self.gain_weight * min(length_m, self.max_gain_length_m)
+                + self._visit_penalty(goal, now_ns))
         return Frontier(points, length_m, goal, path_m, cost, '')
 
     def _start_cell(self, free, robot_xy, origin, resolution):
@@ -351,7 +355,8 @@ def frontier_markers(explorer: FrontierExplorer) -> MarkerArray:
     """Markers for the latest ``select_goal``: candidates, rejected frontiers, the choice.
 
     Usable frontier cells are cyan with a yellow goal; rejected ones are grey;
-    the chosen goal is a large green sphere. Planning 1 asks for the chosen
+    the chosen goal is a large green sphere; a planned route, if any, is a
+    magenta line. Planning 1 asks for the chosen
     frontier and candidate goals in RViz; the path comes from Nav2 on ``/plan``.
     """
     frame_id = explorer.frame_id
@@ -374,6 +379,11 @@ def frontier_markers(explorer: FrontierExplorer) -> MarkerArray:
     if explorer.chosen is not None:
         markers.append(_points_marker(frame_id, 'frontier_chosen', 0, Marker.SPHERE_LIST, 0.8,
                                       (0.1, 0.9, 0.1, 1.0), [explorer.chosen.goal]))
+    # Planners that order every goal (InformationTourExplorer) show the route, in magenta.
+    tour = getattr(explorer, 'tour', ())
+    if len(tour) > 1:
+        markers.append(_points_marker(frame_id, 'exploration_tour', 0, Marker.LINE_STRIP, 0.12,
+                                      (0.9, 0.2, 0.9, 1.0), list(tour)))
     return MarkerArray(markers=markers)
 
 

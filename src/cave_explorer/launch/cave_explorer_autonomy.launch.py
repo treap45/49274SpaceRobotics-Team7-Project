@@ -27,7 +27,8 @@ def generate_launch_description():
         output='screen',
         parameters=[{'use_sim_time': LaunchConfiguration('use_sim_time'),
                      'detector_model': LaunchConfiguration('detector_model'),
-                     'detector_input_bgr': LaunchConfiguration('detector_input_bgr')}]
+                     'detector_input_bgr': LaunchConfiguration('detector_input_bgr'),
+                     'exploration_mode': LaunchConfiguration('exploration_mode')}]
     )
 
     ld.add_action(use_sim_time_launch_arg)
@@ -40,6 +41,11 @@ def generate_launch_description():
         'detector_input_bgr',
         default_value='true',
         description='false for models/artifact_yolov8n.pt (trained on channel-swapped images)'
+    ))
+    ld.add_action(DeclareLaunchArgument(
+        'exploration_mode',
+        default_value='info_tour',
+        description='two_phase, interleaved, information_gain or info_tour'
     ))
     ld.add_action(DeclareLaunchArgument(
         'roadmap_record_path',

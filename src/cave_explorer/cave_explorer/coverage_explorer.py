@@ -69,6 +69,7 @@ class CoverageExplorer:
                  min_region_m2: float = 2.0,
                  min_clearance_m: float = 0.7,
                  gain_per_m2: float = 0.05,
+                 max_gain_m2: float = math.inf,
                  goal_search_m: float = 3.0,
                  failure_cooldown_sec: float = 90.0,
                  visit_cooldown_sec: float = 120.0,
@@ -82,7 +83,9 @@ class CoverageExplorer:
         It was 6 m for the earlier detector. ``fov_rad`` is the camera's
         horizontal field of view (Workplan 5.1). ``min_clearance_m`` matches
         FrontierExplorer: robot radius 0.5 m plus margin. ``goal_search_m``
-        bounds how far from a region's nearest cell a clear goal may be. A goal
+        bounds how far from a region's nearest cell a clear goal may be.
+        ``gain_per_m2`` is metres of path accepted per square metre unseen,
+        counting at most ``max_gain_m2`` of it. A goal
         near a failed one is skipped for ``failure_cooldown_sec``, and near one
         reached for ``visit_cooldown_sec``: arriving should have revealed it, so
         returning would loop."""
@@ -91,6 +94,7 @@ class CoverageExplorer:
         self.min_region_m2 = min_region_m2
         self.min_clearance_m = min_clearance_m
         self.gain_per_m2 = gain_per_m2
+        self.max_gain_m2 = max_gain_m2
         self.goal_search_m = goal_search_m
         self.failure_cooldown_ns = int(failure_cooldown_sec * 1e9)
         self.visit_cooldown_ns = int(visit_cooldown_sec * 1e9)
@@ -248,8 +252,9 @@ class CoverageExplorer:
             best = int(clear_cells[near][np.argmin(gap[near])])
         goal = _world(best, width, origin, res)
         path_m = float(distance[best]) * res
+        gain_m2 = min(area_m2, self.max_gain_m2)
         return Frontier(points, area_m2, goal, path_m,
-                        path_m - self.gain_per_m2 * area_m2, '')
+                        path_m - self.gain_per_m2 * gain_m2, '')
 
     def _align(self, map_msg):
         """Keep the seen grid on the current map, carrying it over when SLAM resizes it."""
@@ -305,17 +310,29 @@ class CoverageExplorer:
 
 
 class TwoPhaseExplorer:
-    """Frontier exploration until the map is done, then camera coverage."""
+    """Frontier exploration and camera coverage.
 
-    def __init__(self, frontier: FrontierExplorer, coverage: CoverageExplorer):
+    With ``interleave`` False: frontiers until the map is done, then coverage.
+    The lidar maps a side passage from 40 m away, so it leaves no frontier
+    there and the robot drives past; in simulation the coverage phase then
+    drove back 100-290 m, 30-50% of the run, to show those passages to the
+    camera. With ``interleave`` True, frontiers and unseen regions compete on
+    the same score (path length minus a gain of a few metres) from the start,
+    so a passage the camera has not seen is covered while the robot is next to it.
+    """
+
+    def __init__(self, frontier: FrontierExplorer, coverage: CoverageExplorer,
+                 interleave: bool = False):
         self.frontier = frontier
         self.coverage = coverage
+        self.interleave = interleave
         self.active = frontier
+        self._frontiers = ()
         self._sources = []      # (goal, planner) for recent goals, newest last
 
     @property
     def frontiers(self):
-        return self.active.frontiers
+        return self._frontiers
 
     @property
     def chosen(self):
@@ -328,9 +345,19 @@ class TwoPhaseExplorer:
     def select_goal(self, map_msg, robot_xy, now_ns: int) -> ExplorationGoal:
         result = self.frontier.select_goal(map_msg, robot_xy, now_ns)
         self.active = self.frontier
+        self._frontiers = self.frontier.frontiers
         if result.status is ExplorationGoalStatus.NO_REACHABLE_FRONTIER:
             result = self.coverage.select_goal(map_msg, robot_xy, now_ns)
             self.active = self.coverage
+            self._frontiers = self.coverage.frontiers
+        elif self.interleave and result.status is ExplorationGoalStatus.READY:
+            unseen = self.coverage.select_goal(map_msg, robot_xy, now_ns)
+            # Both lists, so a goal from either still counts as valid when replanning.
+            self._frontiers = self.frontier.frontiers + self.coverage.frontiers
+            if (unseen.status is ExplorationGoalStatus.READY
+                    and self.coverage.chosen.cost < self.frontier.chosen.cost):
+                result = unseen
+                self.active = self.coverage
         if result.status is ExplorationGoalStatus.READY:
             self._sources = self._sources[-15:] + [(result.goal, self.active)]
         return result
