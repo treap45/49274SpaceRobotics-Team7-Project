@@ -1,5 +1,5 @@
 #!/bin/bash
-# usage: [MODEL=weights.pt] [BGR=true|false] [FRAMES=1] run.sh <outdir>
+# usage: [MODEL=weights.pt] [BGR=true|false] [FRAMES=1] [EXPLORATION=mode] [ROADMAP=1] run.sh <outdir>
 WS=$(cd "$(dirname "$(readlink -f "$0")")/../../.." && pwd)
 source /opt/ros/humble/setup.bash
 source $WS/install/setup.bash
@@ -12,5 +12,5 @@ sleep 20
 python3 $S/recorder.py $D/record.pkl --ros-args -p use_sim_time:=true > $D/recorder.log 2>&1 &
 python3 $S/markers.py $D/markers.json --ros-args -p use_sim_time:=true > $D/markers.log 2>&1 &
 [ -n "$FRAMES" ] && python3 $S/frame_recorder.py $D --ros-args -p use_sim_time:=true > $D/frames.log 2>&1 &
-ros2 launch cave_explorer cave_explorer_autonomy.launch.py ${MODEL:+detector_model:=$MODEL} detector_input_bgr:=${BGR:-true} exploration_mode:=${EXPLORATION:-info_tour} > $D/autonomy.log 2>&1 &
+ros2 launch cave_explorer cave_explorer_autonomy.launch.py ${MODEL:+detector_model:=$MODEL} detector_input_bgr:=${BGR:-true} exploration_mode:=${EXPLORATION:-info_tour} ${ROADMAP:+roadmap_record_path:=$(readlink -f $D)/roadmap.pkl} > $D/autonomy.log 2>&1 &
 wait
