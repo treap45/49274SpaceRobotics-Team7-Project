@@ -1,40 +1,22 @@
-"""Information-gain next-best-view exploration for the camera.
+"""Information-gain exploration for the camera (Planning 1).
 
-Owner: C.
-Contract: repository-root Workplan.md, section 4.5 (the Explorer protocol).
+Only the camera finds artefacts, so the information that matters is camera
+views of places that could hold one. Information grid:
 
-Planning 1, one planner instead of frontiers-then-coverage. The task is to
-find artefacts, and only the camera finds them, so the information that
-matters is camera views of places that could hold one. The lidar map is used
-for where the robot can drive, and as the prior for what the camera might see.
+* a known free cell the camera has not seen: 1 (unless in an unseen patch
+  smaller than ``min_region_m2``);
+* an unknown cell within ``view_range_m`` of a usable frontier: ``p_free``,
+  the fraction of known cells that are free;
+* everything else: 0.
 
-Information grid, from the SLAM map and ``CoverageExplorer``'s seen cells:
-
-* a known free cell the camera has not seen is worth 1 (an artefact could be
-  there), unless it is in an unseen patch smaller than ``min_region_m2`` -
-  lidar shadows behind pillars, as in ``CoverageExplorer``;
-* an unknown cell within ``view_range_m`` of a usable frontier is worth
-  ``p_free``, the fraction of known cells that are free: the chance it is open
-  cave once mapped. Unknown cells elsewhere (inside rock, behind one-cell gaps
-  in a wall) are worth 0;
-* everything else is worth 0.
-
-Candidate viewpoints are reachable cells clear of walls on a ``spacing_m``
-lattice, plus the previous goal so it can be kept. A viewpoint's gain is the
-information inside the camera's view from it: rays over 360 degrees out to
-``view_range_m``, stopping at the first occupied cell and passing through
-unknown ones (optimistic, as the lidar will map them on the way), then the
-best of ``n_headings`` headings of the camera's field of view. That heading is
-the goal's orientation. Utility trades gain against path length as in
-Gonzalez-Banos and Latombe (2002):
+A viewpoint's gain is the information in the camera's view from it (rays to
+``view_range_m``, stopping at walls, best of ``n_headings`` headings). Utility
+(Gonzalez-Banos and Latombe, 2002):
 
     U = gain_m2 * exp(-lambda_per_m * path_m)
 
-Ray casting every candidate is too slow for the 0.2 s main loop, so each
-candidate first gets an upper bound - all information within ``view_range_m``,
-one FFT convolution for the whole grid - and candidates are cast in order of
-bounded utility until the next bound cannot beat the best exact utility.
-Exploration is finished when no reachable viewpoint shows ``min_gain_m2``.
+Candidates are ray cast in order of an FFT upper bound until no bound can beat
+the best exact utility. Exploration ends when no viewpoint shows ``min_gain_m2``.
 """
 
 import math
@@ -77,20 +59,11 @@ class InformationGainExplorer:
                  failure_cooldown_sec: float = 90.0,
                  penalty_radius_m: float = 1.5,
                  settle_sec: float = 10.0):
-        """``coverage`` holds what the camera has seen (the node feeds it
-        ``observe``) and supplies the camera model, ``min_region_m2`` and
-        ``min_clearance_m``. ``frontier`` finds usable frontiers (wide enough,
-        reachable). ``lambda_per_m``: the gain of a viewpoint 1/lambda metres
-        further away counts 1/e as much (0.1: halves every 7 m). ``spacing_m``:
-        candidate lattice. ``min_gain_m2``: smallest view worth driving to,
-        the same size as an unseen patch worth covering. A viewpoint near one
-        reached recently is skipped for ``visit_cooldown_sec`` (arriving there
-        should have shown it, so going back would loop), and near a failed one
-        for ``failure_cooldown_sec``. Unknown cells in line of sight of a
-        reached viewpoint that are still unknown ``settle_sec`` later (time for
-        SLAM to take in the scans from there) cannot be observed and are worth
-        nothing: in simulation such a pocket by a green_crystals came back each
-        time its cooldown ended, and the robot drove 68 m back to it."""
+        """``coverage`` holds what the camera has seen; ``frontier`` finds usable
+        frontiers. ``lambda_per_m`` 0.1 halves a view's value every 7 m.
+        ``spacing_m``: candidate lattice. Viewpoints near a reached or failed
+        one cool down. Unknown cells still unknown ``settle_sec`` after a
+        viewpoint with line of sight was reached are treated as unobservable."""
         self.coverage = coverage
         self.frontier = frontier or FrontierExplorer(min_clearance_m=coverage.min_clearance_m)
         self.lambda_per_m = lambda_per_m
@@ -337,42 +310,23 @@ class InformationGainExplorer:
 
 
 class InformationTourExplorer(InformationGainExplorer):
-    """Frontier-information tour: see every place worth a view, in the shortest order.
+    """Tour of every place worth a camera view, in the shortest order (after FUEL,
+    Zhou et al., RA-L 2021).
 
-    The robot does not know how many artefacts there are, so every place that
-    could hold one has to be seen eventually, and what is left to choose is the
-    order. Picking the best single next view (``InformationGainExplorer``)
-    leaves small pockets behind and drives back for them later; in simulation
-    11-28% of its path re-drove ground already covered. This planner, after
-    FUEL (Zhou et al., RA-L 2021), plans the whole order:
-
-    1. Clusters (frontiers, generalised to the camera). A frontier cluster
-       is a stretch of usable lidar frontier, cut along its principal axis
-       until within ``max_cluster_radius_m`` of its centre, holding the
-       unknown cells of the information grid nearest to it. An unseen
-       cluster is a piece, cut the same way, of a connected region the camera
-       has not seen. Clusters with less than ``min_gain_m2`` are dropped.
-    2. Viewpoints (information). The ``per_cluster`` candidates nearest each
-       cluster's centre are ray cast; each cluster takes the candidate and
-       heading that see most of it, weighted by ``exp(-lambda * path)`` from
-       the robot. A cluster no candidate sees ``min_gain_m2`` of (or half of,
-       if smaller) is dropped.
-    3. Tour. Path lengths between viewpoints through known free space (BFS),
-       then the shortest open route from the robot through all of them:
-       nearest neighbour, improved by 2-opt. The first viewpoint is the goal.
-       Re-planned with every map, so the tour follows what the lidar reveals.
-
-    Every cluster's viewpoint is listed in ``frontiers``, so ``BehaviourManager``
-    keeps driving to its goal while that goal is still some cluster's
-    viewpoint, even if the tour reorders. ``tour`` holds the route for RViz.
+    1. Clusters: stretches of usable frontier and pieces of unseen regions, cut
+       to within ``max_cluster_radius_m`` of their centre.
+    2. Viewpoints: for each cluster, the nearby candidate and heading that see
+       most of it, weighted by path length.
+    3. Tour: shortest open route from the robot through all viewpoints
+       (Held-Karp when small, else nearest neighbour + 2-opt/or-opt). The first
+       viewpoint is the goal; ``tour`` holds the route for RViz.
     """
 
     def __init__(self, coverage: CoverageExplorer, frontier: FrontierExplorer | None = None, *,
                  max_cluster_radius_m: float | None = None, per_cluster: int = 6, **kwargs):
-        """``max_cluster_radius_m`` defaults to the camera range, so all of a
-        cluster is within range of its centre. Other arguments as
-        for ``InformationGainExplorer``. Each cluster has the ``per_cluster``
-        candidates nearest its centre cast for it."""
+        """``max_cluster_radius_m`` defaults to the camera range; ``per_cluster``
+        candidates nearest each centre are cast. Other arguments as for
+        ``InformationGainExplorer``."""
         super().__init__(coverage, frontier, **kwargs)
         self.per_cluster = per_cluster
         self.max_cluster_radius_m = (coverage.view_range_m if max_cluster_radius_m is None
@@ -443,11 +397,7 @@ class InformationTourExplorer(InformationGainExplorer):
             f'{self.chosen.path_m:.1f} m away, tour {length_m:.0f} m ({ctx.seen_pct:.0f}% seen)')
 
     def _clusters(self, value, unknown, res):
-        """Cluster index per cell (-1 for none) and each cluster's information in m2.
-
-        A frontier cluster is a stretch of usable lidar frontier, with the
-        unknown cells nearer to it than to any other stretch. An unseen cluster
-        is a piece of a connected unseen region."""
+        """Cluster index per cell (-1 for none) and each cluster's information in m2."""
         width = value.shape[1]
         radius = self.max_cluster_radius_m / res
         weights = value.ravel()

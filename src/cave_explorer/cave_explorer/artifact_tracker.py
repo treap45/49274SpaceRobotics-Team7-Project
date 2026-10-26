@@ -1,58 +1,24 @@
-"""Artefact localisation, association and stable IDs.
+"""Artefact localisation, association and stable IDs (Perception 3).
 
-Owner: B.
-Contract: repository-root Workplan.md, section 4.3.
+``update`` turns each detection into a map position using the depth image and
+the camera transform at the capture time, and associates it with a track of
+the same class.
 
-``update`` turns one DetectionBatch into map positions, using the depth image
-and the camera transform taken at the batch's capture time, and associates each
-position with a track of the same class within that track's association gate.
+* Depth: valid depths (0.4-10 m) in the central half of the box are grouped
+  into bands; the nearest band with enough pixels gives the depth and pixel,
+  so wall pixels behind the object are ignored.
+* Surface to centre: that pixel is on the near surface, so the point is moved
+  further along the viewing ray by half the visible surface width.
+* Size: width = box pixel width x depth / fx; a track keeps the median of its
+  recent widths. The association gate is ``match_width_factor`` x width, at
+  least ``min_match_radius_m``.
+* Confirmation: a track gets an ``artifact_id`` only after ``confirm_count``
+  observations, so a single bad observation never appears.
+* Merging: two same-class tracks that converge within the gate are merged; the
+  older id survives and the retired one is reported in ``last_merges``.
 
-Size (no prior knowledge of the artefacts): each localised detection gives a
-width estimate, the box's pixel width times the selected depth over ``fx``.
-A track keeps the median of its recent widths. The association gate is
-``match_width_factor`` times the larger of the track's and the observation's
-width, at least ``min_match_radius_m``: a large artefact seen from different
-sides yields estimates spread over about its own width (one green_alien split
-into three tracks 1.7 m apart with a fixed 1.0 m radius), a small one does not.
-``size_m`` exposes the width to the obstacle and inspection modules.
-
-Tracks stay provisional and internal until they have ``confirm_count``
-observations. Only then do they get an ``artifact_id`` and appear in
-``snapshot()``. A single bad-depth observation therefore never reaches C.
-
-Merging: early observations of a large artefact are spread and its width is
-not yet known, so the gate is small and a second track can be confirmed for
-the same artefact; as both means converge they end up within each other's
-gate. After every update, two tracks of the same class within the gate are
-merged (observation-weighted). The older id survives; the newer one is
-retired, never reused, and reported in ``last_merges`` so C can carry its
-inspection record over (Workplan 4.3: an id never changes, but may retire).
-In simulation this cut duplicate tracks from 7 to 1 in a run that found all 15
-artefacts.
-
-Depth (Workplan 4.3 item 2, 5.1): the depth image is the same 720 x 480 sensor
-as the RGB image, so a bbox indexes it directly. Valid depths in the central
-half of the box are split into depth bands. The nearest supported band supplies
-both depth and pixel coordinates, keeping wall depth off the object ray.
-Readings outside the 0.4-10 m depth clip are invalid; a detection with too few
-valid pixels is skipped with a reason rather than placed at a clipped depth.
-
-Surface to centre: that pixel is on the artefact's near surface, about half the
-artefact's depth short of its centre, so wide artefacts were placed towards
-the robot and estimates from opposite sides fell a width apart (1.0-1.7 m for
-green_crystals and ice_formation in simulation). With ``surface_to_centre``
-the point moves further along the horizontal viewing ray by half the visible
-width of the near surface: the lateral extent of the pixels in the box within
-one depth band of the selected depth. That stands in for the unseen depth
-extent and is measured, not assumed per class: a sphere moves by its radius,
-a thin green_alien seen face-on by little (half the bbox width overshot it by
-1 m). Replaying a recorded run, median errors fell to 0.3-0.7 m (ice_formation
-1.6 m: its 5 x 5 m base has no clear centre).
-
-Frames (Workplan 5): unprojection gives a point in the camera *optical* frame
-(z forward, x right, y down). ``transform_at_stamp`` must therefore be
-``map <- camera_rgb_optical_frame``; the image header says ``camera_link``,
-which is rotated relative to it, and is rejected.
+Unprojected points are in the camera optical frame (z forward, x right, y
+down), so the transform must be ``map <- camera_rgb_optical_frame``.
 """
 
 from dataclasses import dataclass, field
@@ -63,11 +29,10 @@ import numpy as np
 
 from .interfaces import ArtifactTrack, DetectionBatch
 
-DEPTH_MIN_M = 0.4     # rgbd_camera depth clip (Workplan 5.1)
+DEPTH_MIN_M = 0.4     # rgbd_camera depth clip
 DEPTH_MAX_M = 10.0
 
-# Intrinsics of the simulated rgbd_camera, derived from the URDF (Workplan 5.1):
-# 720 x 480 pixels, horizontal FOV 2.0944 rad.
+# Simulated rgbd_camera intrinsics from the URDF: 720 x 480, horizontal FOV 2.0944 rad.
 SIM_CAMERA_MODEL = {
     'fx': 360.0 / math.tan(2.0944 / 2.0),
     'fy': 360.0 / math.tan(2.0944 / 2.0),
@@ -116,10 +81,7 @@ class ArtifactTracker:
         min_foreground_fraction: float = 0.05,
         surface_to_centre: bool = True,
     ):
-        """``min_match_radius_m`` and ``match_width_factor`` set the association
-        gate from the measured artefact width (see the module docstring).
-        ``provisional_timeout_sec`` drops unconfirmed tracks that were never
-        seen again, which is what most bad-depth observations become."""
+        """``provisional_timeout_sec`` drops unconfirmed tracks not seen again."""
         if depth_band_width_m <= 0 or not math.isfinite(depth_band_width_m):
             raise ValueError('depth_band_width_m must be finite and positive')
         if not 0 < min_foreground_fraction <= 1:
@@ -171,15 +133,12 @@ class ArtifactTracker:
     ) -> List[ArtifactTrack]:
         """Update tracks from one detection batch and return ``snapshot()``.
 
-        ``matched_depth`` is the depth image (metres, float) captured with the
-        batch's RGB image. ``camera_model`` has ``fx``, ``fy``, ``cx``, ``cy``
-        as keys or attributes. ``transform_at_stamp`` is a ``TransformStamped``
-        (or the equivalent dict) for ``map <- camera_rgb_optical_frame`` at
-        ``detections.stamp_ns``.
+        ``matched_depth`` is in metres; ``camera_model`` has ``fx, fy, cx, cy``;
+        ``transform_at_stamp`` is ``map <- camera_rgb_optical_frame`` at capture time.
         """
         stamp_ns = detections.stamp_ns
         if self._latest_stamp_ns is not None and stamp_ns < self._latest_stamp_ns:
-            # Time went backwards: the simulation was reset (Workplan 4.1).
+            # Time went backwards: the simulation was reset.
             self.reset()
         self._latest_stamp_ns = stamp_ns
         self.last_rejections = []
@@ -292,11 +251,8 @@ class ArtifactTracker:
                     break
 
     def _surface_width_m(self, depth, bbox_xyxy, depth_m, camera_model) -> float:
-        """Lateral extent (m) of the box's pixels within one depth band of ``depth_m``.
-
-        The 5th-95th percentile of their columns, so a few stray pixels at the
-        same depth (floor, a wall edge) do not widen it.
-        """
+        """Lateral extent (m) of the box's pixels within one depth band of ``depth_m``
+        (5th-95th percentile of columns, to ignore stray pixels)."""
         height, width = depth.shape[:2]
         x_min, y_min, x_max, y_max = bbox_xyxy
         window = depth[max(0, int(math.floor(y_min))):min(height, int(math.ceil(y_max))),
@@ -326,19 +282,15 @@ class ArtifactTracker:
     def _depth_in_bbox(self, depth, bbox_xyxy):
         """Nearest supported depth band in the central half of the box.
 
-        Group sorted valid depths into bands spanning at most ``depth_band_width_m``.
-        Bounding the total span prevents sparse edge readings bridging to a wall.
-        Require at least four pixels and ``min_foreground_fraction`` of the
-        sampling window, so isolated near readings do not win over an object.
-        Return ``((depth_m, u, v), None)`` from the same band, or ``(None, reason)``.
-        A supported nearer occluder cannot be distinguished from the target
-        using depth alone; this is a foreground heuristic, not segmentation.
+        Bands span at most ``depth_band_width_m`` and need ``min_foreground_fraction``
+        of the window (at least 4 pixels). Returns ``((depth_m, u, v), None)`` or
+        ``(None, reason)``.
         """
         height, width = depth.shape[:2]
         x_min, y_min, x_max, y_max = bbox_xyxy
         quarter_w = (x_max - x_min) / 4.0
         quarter_h = (y_max - y_min) / 4.0
-        # Right and bottom edges are exclusive (Workplan 4.1).
+        # Right and bottom edges are exclusive.
         u0 = max(0, int(math.floor(x_min + quarter_w)))
         u1 = min(width, int(math.ceil(x_max - quarter_w)))
         v0 = max(0, int(math.floor(y_min + quarter_h)))

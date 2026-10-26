@@ -1,43 +1,18 @@
-"""Frontier extraction and exploration goal selection.
+"""Frontier extraction and exploration goal selection (Planning 1).
 
-Owner: C.
-Contract: repository-root Workplan.md, section 4.5.
-
-Planning 1. Given the SLAM occupancy grid and the robot's position, choose the
-next place worth driving to: a reachable point on the boundary between known
-free space and unknown space (a *frontier*). Driving there lets the lidar see
-past it, the map grows, and new frontiers appear further on.
-
-Pipeline, all on the grid:
+A frontier is the boundary between known free and unknown space; driving to it
+lets the lidar map further. Pipeline, all on the occupancy grid:
 
 1. Classify cells: unknown (-1), occupied (>= 50), free (the rest).
-2. Frontier cells are free cells with an unknown 4-neighbour.
-3. Group touching frontier cells (8-connectivity) into frontiers. Drop any
-   narrower than the robot - a one-cell hole in a wall is noise, not a passage.
-4. Measure path distance from the robot through known free space (a BFS on the
-   grid, so walls count; straight-line distance would not). Frontiers the robot
-   cannot reach through known free space are dropped.
-5. In each frontier, the goal is the nearest reachable cell that is at least
-   ``min_clearance_m`` from any occupied cell, so Nav2 does not reject it.
-6. Score: path length, minus a bonus for frontier length, plus a decaying
-   penalty near recently visited goals. Goals near a recent failure are
-   excluded for a cooldown. The lowest score wins.
+2. Frontier cells are free cells with an unknown 4-neighbour; touching ones
+   (8-connected) form a frontier. Frontiers narrower than the robot are dropped.
+3. Path distance from the robot by BFS through known free space; unreachable
+   frontiers are dropped.
+4. The goal is the nearest reachable cell at least ``min_clearance_m`` from walls.
+5. Score: path length minus a bonus for frontier length, plus a decaying
+   penalty near recent goals; goals near a recent failure cool down. Lowest wins.
 
-This is the first version: effectively nearest-first. Path cost, frontier size
-and revisit avoidance are the incremental features the task sheet suggests.
-
-Defaults follow the simulation (Workplan 5.1, ``slam_params.yaml``,
-``nav2_params.yaml``): 0.3 m cells, a robot radius of 0.5 m, Nav2 inflation and
-goal tolerance of 1.0 m, and ``allow_unknown: true`` so Nav2 will plan up to
-and into unknown space.
-
-Known limitation, left for the next version: frontiers are driven by a 40 m
-lidar, but the camera localises artefacts only within 10 m. A side chamber the
-lidar has mapped from the main passage has no frontier left, yet the camera may
-never have been near it.
-
-Penalties use ``now_ns`` from the caller's ROS clock, as every timeout in this
-project does (Workplan 4.1).
+Defaults match the simulation: 0.3 m cells, robot radius 0.5 m.
 """
 
 from collections import Counter, deque
@@ -91,10 +66,7 @@ class Frontier:
 class FrontierExplorer:
     """Chooses exploration goals from the occupancy grid.
 
-    Keeps no map of its own: every call works from the snapshot passed in, so
-    the result always reflects the latest SLAM output. The only state carried
-    between calls is the visit and failure history fed back through
-    ``report_outcome``.
+    Keeps no map; the only state is the visit/failure history from ``report_outcome``.
     """
 
     def __init__(self, *,
@@ -107,18 +79,10 @@ class FrontierExplorer:
                  failure_cooldown_sec: float = 90.0,
                  penalty_radius_m: float = 1.5,
                  start_search_m: float = 1.0):
-        """Configure selection.
-
-        ``min_frontier_m``: frontiers shorter than this are ignored; the robot
-        is 1 m wide. ``min_clearance_m``: a goal must be this far from any
-        occupied cell; robot radius 0.5 m plus margin. ``gain_weight``: metres
-        of extra path accepted per metre of frontier length, counting at most
-        ``max_gain_length_m`` of it (what one stop can show). ``visit_penalty_m``:
-        path-length penalty near a goal reached recently, fading linearly over
-        ``visit_decay_sec``. ``failure_cooldown_sec``: how long goals near a
-        failed one are excluded. ``penalty_radius_m``: how near counts as the
-        same place. ``start_search_m``: how far to look for a free cell when the
-        robot's own cell is not free, as happens at start-up.
+        """``gain_weight``: metres of path worth one metre of frontier, up to
+        ``max_gain_length_m``. ``visit_penalty_m`` fades over ``visit_decay_sec``;
+        goals near a failure are excluded for ``failure_cooldown_sec``;
+        ``penalty_radius_m`` is how near counts as the same place.
         """
         self.min_frontier_m = min_frontier_m
         self.min_clearance_m = min_clearance_m
@@ -196,12 +160,8 @@ class FrontierExplorer:
 
     def report_outcome(self, goal: PoseStamped, status: NavigationStatus,
                        reason: str, now_ns: int) -> None:
-        """Feed back how driving to a goal from ``select_goal`` went.
-
-        ``SUCCEEDED`` marks the place visited; ``ABORTED``, ``REJECTED`` and
-        ``ERROR`` mark it failed. ``CANCELED`` changes nothing: navigation_client
-        reports our own preemptions that way, and they say nothing about the goal.
-        ``reason`` is accepted for the record and the logs, not used in scoring.
+        """Feed back a goal's outcome: ``SUCCEEDED`` marks it visited, ``ABORTED``,
+        ``REJECTED`` and ``ERROR`` failed; ``CANCELED`` (our own preemption) changes nothing.
         """
         place = (goal.pose.position.x, goal.pose.position.y, now_ns)
         if status is NavigationStatus.SUCCEEDED:
@@ -314,12 +274,7 @@ def _frontier_groups(frontier_mask):
 
 
 def _path_cells(free, start):
-    """BFS distance in cells through free space from ``start``; -1 where unreachable.
-
-    4-connected, so diagonal moves count double. That over-estimates the true
-    length by up to about 40 %, evenly across frontiers, which is fine for
-    ranking them.
-    """
+    """BFS distance in cells (4-connected) through free space; -1 where unreachable."""
     height, width = free.shape
     passable = free.ravel().tolist()
     distance = [-1] * (height * width)
@@ -352,13 +307,8 @@ def _world(cell, width, origin, resolution):
 # ----------------------------------------------------------------------
 
 def frontier_markers(explorer: FrontierExplorer) -> MarkerArray:
-    """Markers for the latest ``select_goal``: candidates, rejected frontiers, the choice.
-
-    Usable frontier cells are cyan with a yellow goal; rejected ones are grey;
-    the chosen goal is a large green sphere; a planned route, if any, is a
-    magenta line. Planning 1 asks for the chosen
-    frontier and candidate goals in RViz; the path comes from Nav2 on ``/plan``.
-    """
+    """Markers for the latest ``select_goal``: usable frontiers cyan with yellow
+    goals, rejected ones grey, the chosen goal green, a planned tour magenta."""
     frame_id = explorer.frame_id
     clear_all = Marker()
     clear_all.header.frame_id = frame_id

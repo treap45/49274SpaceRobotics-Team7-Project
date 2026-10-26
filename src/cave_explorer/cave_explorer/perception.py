@@ -1,11 +1,6 @@
-"""YOLO-based artefact detection and image annotation.
+"""YOLO-based artefact detection and image annotation (Perception 2).
 
-Owner: A.
-Tasks: Perception 2.
-
-The detector receives an RGB/BGR camera image and returns detections using
-the shared DetectionBatch interface. Bounding boxes remain in the original
-camera image coordinates so they can be used by Perception 3.
+Returns a ``DetectionBatch`` with boxes in the original image coordinates.
 """
 
 from pathlib import Path
@@ -27,8 +22,7 @@ class Detector:
         confidence_threshold: float = 0.15,
     ):
         if model_path is None:
-            # Retrained on simulator-labelled images (datasets/autolabel); the
-            # earlier hand-collected model is models/artifact_yolov8n.pt.
+            # Model trained on simulator-labelled images.
             package_share = get_package_share_directory('cave_explorer')
             model_path = (
                 Path(package_share)
@@ -87,8 +81,7 @@ class Detector:
 
             class_name = self.model.names[class_id]
 
-            # YOLO xyxy is already expressed in coordinates of the
-            # original input image.
+            # YOLO xyxy is already in original image coordinates.
             x_min, y_min, x_max, y_max = (
                 float(value)
                 for value in box.xyxy[0].tolist()
@@ -100,8 +93,7 @@ class Detector:
             x_max = max(0.0, min(x_max, float(image_width)))
             y_max = max(0.0, min(y_max, float(image_height)))
 
-            # Ignore invalid boxes rather than passing invalid geometry
-            # to the shared Detection2D interface.
+            # Skip invalid boxes.
             if x_max <= x_min or y_max <= y_min:
                 continue
 

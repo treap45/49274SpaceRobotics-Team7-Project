@@ -1,77 +1,30 @@
-"""Exploration/inspection state machine and inspection records.
+"""Exploration/inspection state machine and inspection records (Planning 3).
 
-Owner: C.
-Contract: repository-root Workplan.md, sections 4.4-4.6.
+Explore; when a confirmed artefact of an inspection class appears, approach it;
+retry once if it is lost or unreachable, then give up; on success record it as
+visited; resume exploring. Plain Python: the node calls ``step`` from its timer,
+so the state machine is unit-tested with fakes.
 
-Planning 3. Alternates between exploring (Planning 1) and close-range
-inspection (Planning 2), following the task sheet's sequence:
+Rules:
 
-1. Explore with frontier goals.
-2. When a confirmed artefact of a chosen class appears, stop exploring and
-   approach it.
-3. If it is lost or cannot be reached, retry once; if that also fails, give up
-   on it and resume exploring.
-4. After a successful inspection, record it as visited and resume exploring.
-
-The manager is plain Python with no ROS runtime: the main node calls ``step``
-from its timer with the current time, robot pose, map and B's track snapshot,
-and the collaborators are passed in. That keeps the whole state machine
-testable in milliseconds with fakes.
-
-Rules carried over from Workplan.md:
-
-* C owns inspection records; B owns observations (4.6). Records exist for
-  confirmed tracks of the inspection classes only.
-* ``VISITED`` needs B's ``evaluate`` to say ``SATISFIED``. A Nav2 success alone
-  is not an inspection (4.4).
-* A Nav2 success more than ``arrival_tolerance_m`` from the goal is not an
-  arrival. Nav2 Humble can report success for a goal that preempted another
-  just as the controller reached the old one (seen in simulation: success
-  0.2 s after sending a goal 9 m away). Exploration reports that as
-  ``CANCELED`` so the frontier is neither visited nor penalised; an inspection
-  viewpoint is sent again.
-* ``LOST`` only counts once the robot has reached the attempt's viewpoint. A
-  retry starts where the failed attempt ended, still close and still not
-  seeing the artefact, so counting it at once would fail the retry on its first
-  tick. The retry also drives to a new viewpoint, excluding every one tried.
-* A goal the robot makes no progress towards - less than ``stuck_distance_m``
-  in ``stuck_timeout_sec`` - is given up as failed: an exploration goal is
-  reported ``ABORTED`` (so the explorer cools down near it) and replaced, an
-  inspection viewpoint is swapped for another. In simulation the robot sat on
-  a green_crystals artefact the lidar cannot see while Nav2 retried for three
-  120 s timeouts in a row. Giving up also cancels the goal and calls
-  ``on_stuck(robot_pose)``, which the node uses to mark where the robot stuck
-  and back away; it returns how many seconds to wait before the next goal.
-* A Nav2 rejection moves on to another viewpoint, excluding the ones already
-  tried; it does not by itself use up an attempt (4.4).
-* An attempt has ``attempt_timeout_sec`` plus the travel to its first
-  viewpoint at ``approach_speed_mps`` (about half the robot's cruising speed,
-  for detours). A plain 60 s was enough when an inspection began next to the
-  artefact, but a revisit starts wherever exploration ended: in simulation the
-  robot was 37 m away and still 15 m short when 60 s ran out.
-* ``DEFERRED`` is terminal for the run (4.6), with one exception: an artefact
-  deferred because the planner found no safe viewpoint gets one more round of
-  ``max_attempts`` once exploration is exhausted and the map is as complete as
-  it will get. Viewpoints are judged on the map, and a target seen early often
-  has unknown cells round it: in simulation a green_crystals against the cave
-  wall was deferred with 8 of 16 candidates "not free", and on the final map a
-  candidate passed. The round keeps the viewpoints already tried excluded and
-  happens once per artefact, so it cannot loop. Deferrals for other reasons
-  (lost, never satisfied) are not revisited: those were mostly false
-  detections, and driving back to them costs time for nothing.
-* When the tracker merges two tracks of one artefact it retires the newer id;
-  ``merge_records`` carries that record over to the surviving id: an artefact
-  inspected under either id counts as inspected, and an inspection under way
-  continues under the surviving id. Without this the robot inspected the same
-  green_crystals three or four times through its duplicate tracks.
-* Goals are switched by sending the new goal, never cancel-then-send:
-  navigation_client explains why, and reports the preempted goal as
-  ``CANCELED`` so nothing gets penalised for it.
-
-Assumption pending B's review: ``InspectionPlanner.make_goal`` accepts an
-``exclude`` keyword listing viewpoints already tried (Workplan 4.4 offers this
-or a candidate list). If B returns a list instead, only ``_plan_viewpoint``
-changes.
+* ``VISITED`` needs the planner's ``evaluate`` to return ``SATISFIED``; a Nav2
+  success alone is not an inspection.
+* A Nav2 success farther than ``arrival_tolerance_m`` from the goal is not an
+  arrival (Humble can report success for a preempted goal). Exploration treats
+  it as ``CANCELED``; an inspection viewpoint is sent again.
+* ``LOST`` only counts after the robot has reached the attempt's viewpoint. A
+  retry drives to a new viewpoint, excluding every one tried.
+* No progress (less than ``stuck_distance_m`` in ``stuck_timeout_sec``) gives the
+  goal up: the goal is cancelled and ``on_stuck`` lets the node back away.
+* A Nav2 rejection moves to another viewpoint without using up an attempt.
+* An attempt has ``attempt_timeout_sec`` plus the travel time to its first
+  viewpoint at ``approach_speed_mps``.
+* ``DEFERRED`` is final, except that an artefact deferred for lack of a safe
+  viewpoint gets one more round once exploration is exhausted and the map is
+  complete. Other deferrals (mostly false detections) are not revisited.
+* When the tracker merges two tracks, ``merge_records`` moves the retired id's
+  record to the surviving id, so one artefact is never inspected twice.
+* Goals are switched by sending the new goal, never cancel-then-send.
 """
 
 from dataclasses import dataclass, field
@@ -128,17 +81,16 @@ class InspectionPlanner(Protocol):
 
 @dataclass(frozen=True)
 class BehaviourConfig:
-    """Tuning for the state machine. Times are seconds of ROS (simulation) time.
+    """State machine tuning; times in seconds of ROS time.
 
-    ``inspect_classes`` is the team's choice of 2-3 reliably detected classes
-    (Planning 2) and has no default: an empty set means explore only.
+    ``inspect_classes`` empty means explore only.
     """
 
     inspect_classes: frozenset = frozenset()
     max_attempts: int = 2               # the first try plus one retry
     max_viewpoints: int = 3             # per attempt, after Nav2 rejections
-    attempt_timeout_sec: float = 60.0   # one approach, start to finish, plus travel:
-    approach_speed_mps: float = 0.3     # travel allowance = distance to the viewpoint / this
+    attempt_timeout_sec: float = 60.0   # per attempt, plus travel time
+    approach_speed_mps: float = 0.3     # travel time = distance / this
     dwell_timeout_sec: float = 10.0     # arrived, waiting for SATISFIED
     explore_goal_timeout_sec: float = 120.0
     replan_period_sec: float = 4.0      # SLAM republishes the map every 2 s
@@ -181,7 +133,7 @@ class BehaviourManager:
                  config: BehaviourConfig = BehaviourConfig(),
                  log: Callable[[str], None] | None = None,
                  on_stuck: Callable[[object], float] | None = None):
-        """``planner`` may be ``None`` until B's module exists: the robot then only explores."""
+        """With ``planner`` ``None`` the robot only explores."""
         self._navigator = navigator
         self._explorer = explorer
         self._planner = planner
@@ -205,7 +157,7 @@ class BehaviourManager:
 
     @property
     def records(self) -> tuple[InspectionRecord, ...]:
-        """Read-only snapshot of every inspection record, for B's markers (Workplan 4.6)."""
+        """Snapshot of every inspection record, for the markers."""
         return tuple(self._records[key] for key in sorted(self._records))
 
     def merge_records(self, retired_id: int, kept_id: int) -> None:
@@ -251,10 +203,8 @@ class BehaviourManager:
 
         if self.mode is Mode.INSPECTING:
             self._inspect(now_ns, robot_pose, map_msg, targets)
-        # A target can fail at once (no safe viewpoint); move straight on to the
-        # next one rather than sending an exploration goal only to preempt it.
-        # Each pass should take a record off UNVISITED; the bound keeps a bug in
-        # that from freezing the node's timer.
+        # A target can fail at once (no safe viewpoint): try the next one in
+        # the same tick. Bounded so a bug cannot hang the timer.
         for _ in range(len(targets)):
             if self.mode is Mode.INSPECTING or self._planner is None:
                 break
@@ -330,8 +280,7 @@ class BehaviourManager:
         self.status = f'exploring: {result.reason}'
 
     def _send(self, goal: PoseStamped, timeout_sec: float, keep_progress: bool = False) -> int:
-        """A new goal gets the full stuck timeout, except a switch made while
-        driving: switching every few seconds must not hide that the robot is stuck."""
+        """Send a goal; a switch while driving keeps the stuck timer running."""
         if not keep_progress:
             self._progress = None
         return self._navigator.send(goal, timeout_sec=timeout_sec)
@@ -378,8 +327,7 @@ class BehaviourManager:
         return min(waiting, key=lambda track: math.dist(here, track.position_map[:2]))
 
     def _revisit_deferred(self, targets) -> bool:
-        """Exploration is exhausted: give targets deferred for want of a safe
-        viewpoint their one more round. True if any was put back."""
+        """Put no-safe-viewpoint deferrals back for one more round. True if any."""
         ids = [artifact_id for artifact_id in self._awaiting_revisit if artifact_id in targets]
         for artifact_id in ids:
             self._revisit_excluded[artifact_id] = self._awaiting_revisit.pop(artifact_id)
@@ -391,8 +339,7 @@ class BehaviourManager:
         return bool(ids)
 
     def _begin_inspection(self, track: ArtifactTrack, now_ns: int) -> None:
-        # Any exploration goal is simply abandoned: sending the viewpoint
-        # preempts it, and its CANCELED result is never reported.
+        # Sending the viewpoint preempts any exploration goal.
         self._exploration = None
         self._inspection = _Inspection(
             track.artifact_id, now_ns,
@@ -502,8 +449,7 @@ class BehaviourManager:
         self._finish_inspection()
 
     def _finish_inspection(self) -> None:
-        # Whatever viewpoint goal is still running is preempted by the next
-        # exploration goal.
+        # The next exploration goal preempts any running viewpoint goal.
         self._inspection = None
         self.mode = Mode.EXPLORING
         self._last_plan_ns = None

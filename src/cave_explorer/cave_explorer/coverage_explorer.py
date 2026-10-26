@@ -1,32 +1,19 @@
 """Camera coverage: where the camera has looked, and where to drive so it looks everywhere.
 
-Owner: C.
-Contract: repository-root Workplan.md, section 4.5 (the Explorer protocol).
+The lidar maps the cave from 40 m away, but artefacts are only localised within
+the camera's depth range, so a finished map does not mean every artefact has
+been seen.
 
-Planning 1, second phase. Frontier exploration finishes when the *lidar* has
-mapped the cave, but the lidar reaches 40 m and artefacts are localised only
-within the camera's 10 m depth range. In simulation the map closed after 5.5
-minutes of driving with most of the cave never in camera view, so most
-artefacts could not have been found.
+``CoverageExplorer.observe`` marks the known cells the camera sees from its
+pose (rays across the field of view to ``view_range_m``, stopping at the first
+occupied cell). ``select_goal`` groups reachable unseen free cells into
+regions, ignores those under ``min_region_m2``, and drives to the clear cell
+nearest by path, facing the region's centroid. Score: path length minus a
+bonus per unseen square metre.
 
-``CoverageExplorer.observe`` marks the known cells the camera can see from its
-current pose: rays across the horizontal field of view out to
-``view_range_m``, each stopping at the first occupied cell. ``select_goal``
-groups free cells the camera has not seen, reachable through known free space,
-into connected regions; regions smaller than ``min_region_m2`` are lidar
-shadows behind pillars and are ignored. Each region's goal is its cell nearest
-by path that is clear of walls (or the clear cell closest to that), facing the
-region's centroid. Score: path length minus a bonus per square metre unseen.
-Cells near a goal reached or failed recently are left out when picking the
-nearest cell, not the whole region: the nearest unseen cell is often right
-behind the robot, and dropping the region would end coverage early.
-
-``TwoPhaseExplorer`` runs frontier exploration until it reports no reachable
-frontier, then coverage, and routes each outcome back to whichever planner
-produced the goal. It exposes ``frontiers``/``chosen``/``frame_id`` of the
-planner in use, so ``BehaviourManager`` replanning and ``frontier_markers``
-work unchanged; coverage regions are reported as ``Frontier`` records whose
-``length_m`` holds the region's area in square metres.
+``TwoPhaseExplorer`` combines frontier exploration and coverage and routes each
+outcome back to the planner that produced the goal. Coverage regions are
+reported as ``Frontier`` records whose ``length_m`` holds the area in m².
 """
 
 from collections import Counter
@@ -75,20 +62,12 @@ class CoverageExplorer:
                  visit_cooldown_sec: float = 120.0,
                  penalty_radius_m: float = 1.5,
                  start_search_m: float = 1.0):
-        """``view_range_m`` is how far the camera is trusted to spot an
-        artefact and the tracker to place it: 1 m inside the 10 m depth limit,
-        beyond which a detection cannot be localised. Replaying a recorded run,
-        the detector found every visible artefact of every class in every
-        frame out to 10 m (white_sphere, the first to drop, 94% at 10-12 m).
-        It was 6 m for the earlier detector. ``fov_rad`` is the camera's
-        horizontal field of view (Workplan 5.1). ``min_clearance_m`` matches
-        FrontierExplorer: robot radius 0.5 m plus margin. ``goal_search_m``
-        bounds how far from a region's nearest cell a clear goal may be.
-        ``gain_per_m2`` is metres of path accepted per square metre unseen,
-        counting at most ``max_gain_m2`` of it. A goal
-        near a failed one is skipped for ``failure_cooldown_sec``, and near one
-        reached for ``visit_cooldown_sec``: arriving should have revealed it, so
-        returning would loop."""
+        """``view_range_m``: how far the camera is trusted to detect and localise
+        (inside the 10 m depth limit). ``fov_rad``: horizontal field of view.
+        ``min_clearance_m``: goal distance from walls. ``goal_search_m``: how far
+        from a region a clear goal may be. ``gain_per_m2``: metres of path worth
+        one unseen m², up to ``max_gain_m2``. Goals near a failed or reached one
+        are skipped for ``failure_cooldown_sec`` / ``visit_cooldown_sec``."""
         self.view_range_m = view_range_m
         self.fov_rad = fov_rad
         self.min_region_m2 = min_region_m2
@@ -312,13 +291,9 @@ class CoverageExplorer:
 class TwoPhaseExplorer:
     """Frontier exploration and camera coverage.
 
-    With ``interleave`` False: frontiers until the map is done, then coverage.
-    The lidar maps a side passage from 40 m away, so it leaves no frontier
-    there and the robot drives past; in simulation the coverage phase then
-    drove back 100-290 m, 30-50% of the run, to show those passages to the
-    camera. With ``interleave`` True, frontiers and unseen regions compete on
-    the same score (path length minus a gain of a few metres) from the start,
-    so a passage the camera has not seen is covered while the robot is next to it.
+    ``interleave`` False: frontiers until the map is done, then coverage.
+    ``interleave`` True: frontiers and unseen regions compete on the same score
+    from the start, so a passage is covered while the robot is next to it.
     """
 
     def __init__(self, frontier: FrontierExplorer, coverage: CoverageExplorer,

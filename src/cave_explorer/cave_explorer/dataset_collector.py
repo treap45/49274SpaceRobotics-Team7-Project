@@ -1,12 +1,4 @@
-"""Selective image collection for Perception 1.
-
-Owner: A.
-Task: Perception 1.
-
-This module stores selected RGB camera images for dataset creation.
-Images are saved manually rather than saving every camera frame, allowing
-the operator to collect useful views, different distances and angles,
-and negative examples.
+"""Selective image collection for the Perception 1 dataset: saves chosen camera frames, not every frame.
 """
 
 from pathlib import Path
@@ -56,12 +48,7 @@ class DatasetCollector:
         self.latest_image = image.copy()
 
     def save_latest_image(self):
-        """Save one selected image from the latest camera frame.
-
-        Returns:
-            tuple[bool, str]:
-                success flag and a human-readable result message.
-        """
+        """Save the latest camera frame; return (success, message)."""
 
         if self.latest_image is None:
             return False, 'No camera image received yet.'

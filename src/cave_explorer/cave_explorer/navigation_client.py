@@ -1,44 +1,23 @@
 """Nav2 NavigateToPose lifecycle management.
 
-Owner: C.
-Contract: repository-root Workplan.md, section 4.5.
-
-This module is the only owner of the ``navigate_to_pose`` action client. It
-turns the callback-driven action into three calls the behaviour manager can
-make from its timer without blocking::
+The only owner of the ``navigate_to_pose`` action client. It turns the
+callback-driven action into three non-blocking calls::
 
     request_id = client.send(goal)
     progress = client.poll(request_id)   # interfaces.NavigationProgress
     client.cancel(request_id)
 
-Each request keeps its own record, and every action callback is bound to the
-id of the request that created it, so a late result for an old goal can never
-change the state of a newer one.
+Every callback is bound to the id of its request, so a late result for an old
+goal cannot change a newer one. Two Nav2 Humble behaviours shape the rest:
 
-Two Nav2 Humble behaviours, read from the installed
-``nav2_util/simple_action_server.hpp`` and
-``nav2_behavior_tree/bt_action_server_impl.hpp``, shape the rest:
+* A new goal preempts the running one, which Nav2 reports as *aborted*. This
+  client reports goals it superseded as ``CANCELED`` instead, so they are not
+  counted as failures.
+* A cancel can also terminate a goal sent while it is processed, so after a
+  cancel the next goal waits for the cancelled goal's result.
 
-* A goal sent while another is executing preempts it, and the preempted goal
-  is *aborted* (``accept_pending_goal`` aborts the current handle). Our own
-  change of plan would look exactly like a navigation failure. This client
-  remembers which requests it superseded and reports them as ``CANCELED``, so
-  exploration does not penalise a frontier for it.
-
-* A cancelled behaviour tree ends with ``terminate_all``, which also
-  terminates a goal that arrived while the cancel was being processed. So
-  after a cancel, any new goal is held back until the cancelled goal's result
-  has arrived.
-
-Switching targets is therefore safest as a plain ``send`` of the new goal;
-``cancel`` is for stopping with nothing to replace it.
-
-Nav2 Humble's result message is empty and never says why a goal failed. The
-``reason`` strings are this client's description of what it observed.
-
-Timing uses the node's clock (simulation time under ``use_sim_time``).
-Timeouts are evaluated on every ``send``, ``poll`` and ``cancel``, so the
-client needs no timer of its own.
+So switching targets is a plain ``send``; ``cancel`` is only for stopping.
+Timeouts use the node's clock and are checked on every call, so no timer is needed.
 """
 
 from dataclasses import dataclass
@@ -109,13 +88,11 @@ class NavigationClient:
                  history: int = 64,
                  callback_group=None,
                  clock=None):
-        """Create the action client. Never blocks, even if Nav2 is not running yet.
+        """Create the action client; never blocks.
 
-        ``goal_timeout_sec`` bounds how long Nav2 may work on one goal; ``send``
-        can override it per goal. ``server_wait_sec`` bounds how long a request
-        may wait to be sent. ``cancel_grace_sec`` bounds how long a cancelled
-        goal may hold back the next one if Nav2 never reports its result.
-        ``clock`` defaults to the node's clock and exists so tests can drive time.
+        ``goal_timeout_sec``: default limit per goal. ``server_wait_sec``: how long
+        a request may wait to be sent. ``cancel_grace_sec``: how long a cancelled
+        goal may hold back the next. ``clock`` lets tests drive time.
         """
         for name, value in (('goal_timeout_sec', goal_timeout_sec),
                             ('server_wait_sec', server_wait_sec),
@@ -151,11 +128,7 @@ class NavigationClient:
         return self._client.wait_for_server(timeout_sec=timeout_sec)
 
     def send(self, goal: PoseStamped, timeout_sec: float | None = None) -> int:
-        """Queue a goal and return its request id immediately.
-
-        Problems never raise: a goal that cannot be sent becomes an ``ERROR``
-        that ``poll`` reports, so the main loop keeps running.
-        """
+        """Queue a goal and return its request id; failures show up as ``ERROR`` in ``poll``."""
         with self._lock:
             self._tick()
             request_id = self._next_id
@@ -173,12 +146,7 @@ class NavigationClient:
             return request_id
 
     def cancel(self, request_id: int) -> None:
-        """Ask Nav2 to stop a request.
-
-        The status stays ``ACTIVE`` until Nav2 reports back, because a goal can
-        still finish before the cancel lands. Superseded requests are already
-        being stopped by preemption and are left alone.
-        """
+        """Ask Nav2 to stop a request; the status stays ``ACTIVE`` until Nav2 reports back."""
         with self._lock:
             self._tick()
             request = self._requests.get(request_id)
@@ -385,9 +353,7 @@ class NavigationClient:
             request = self._requests.get(request_id)
             if request is None or request.status.is_terminal:
                 return
-            # Feedback travels on a topic and can overtake the goal response,
-            # but Nav2 only publishes it for a goal it has accepted - so it is
-            # proof enough that the goal is active.
+            # Feedback can overtake the goal response, but only comes for an accepted goal.
             if request.status is NavigationStatus.PENDING:
                 request.status = NavigationStatus.ACTIVE
             distance = float(feedback_msg.feedback.distance_remaining)

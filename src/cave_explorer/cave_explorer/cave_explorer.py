@@ -1,26 +1,18 @@
 #!/usr/bin/env python3
 """Main node: ROS I/O and scheduling for the exploration and inspection pipeline.
 
-Owner: C (A/B review).
-Contract: repository-root Workplan.md, sections 3 and 5.
-
 Data flow, one module call per arrow::
 
-    camera/image ──▶ Detector (A) ──▶ ArtifactTracker (B) ──▶ confirmed tracks
-    camera/depth/image ─┘ matched by stamp      ▲                  │
-    TF map <- camera_rgb_optical_frame at stamp ┘                  ▼
-    /map, TF map <- base_link ─────────────────▶ BehaviourManager (C)
-                                                  ├ FrontierExplorer, then
-                                                  │ CoverageExplorer (C)
-                                                  ├ InspectionPlanner (B)
-                                                  └ NavigationClient (C) ──▶ Nav2
+    camera/image ──▶ Detector ──▶ ArtifactTracker ──▶ confirmed tracks
+    camera/depth/image ─┘ matched by stamp      ▲             │
+    TF map <- camera_rgb_optical_frame at stamp ┘             ▼
+    /map, TF map <- base_link ────────────────▶ BehaviourManager
+                                                  ├ exploration (exploration_mode)
+                                                  ├ InspectionPlanner
+                                                  └ NavigationClient ──▶ Nav2
 
-Everything runs on one single-threaded executor (Workplan 5.1): the camera is
-3 Hz and YOLO on the GPU takes milliseconds.
-
-Goals are shown on ``exploration_goal``, never ``goal_pose``: Nav2's
-bt_navigator subscribes to ``goal_pose`` and would re-send the pose as a new
-goal, preempting ours.
+Everything runs on one single-threaded executor. Goals are shown on
+``exploration_goal``, not ``goal_pose``, which Nav2 would treat as a new goal.
 """
 
 from collections import deque
@@ -54,17 +46,14 @@ from cave_explorer.nbv_explorer import InformationGainExplorer, InformationTourE
 
 MAP_FRAME = 'map'
 ROBOT_FRAME = 'base_link'
-# Unprojected depth points are in the optical frame, not the image header's
-# camera_link (Workplan 5).
+# Unprojected depth points are in the optical frame, not camera_link.
 CAMERA_OPTICAL_FRAME = 'camera_rgb_optical_frame'
 # After getting stuck: reverse 0.75 m, clear of the contact mark ahead.
 BACKOFF_SPEED_M_S = 0.25
 BACKOFF_SEC = 3.0
-# Nav2 replans at 1 Hz while it has a path, pausing for its spin/wait/backup
-# recoveries (up to ~5 s each) when the robot cannot follow it. No /plan for
-# this long - inside the 20 s stuck timeout - means Nav2 could not plan at all.
+# No /plan for this long means Nav2 could not plan at all (it replans at 1 Hz).
 PLAN_FRESH_SEC = 15.0
-# camera_joint in mars_explorer.urdf.xacro: the camera is 0.5 m ahead of base_link.
+# The camera is 0.5 m ahead of base_link.
 CAMERA_FORWARD_M = 0.5
 EXPLORATION_MODES = ('two_phase', 'interleaved', 'information_gain', 'info_tour')
 
@@ -102,23 +91,15 @@ class CaveExplorer(Node):
     def __init__(self):
         super().__init__('cave_explorer_node')
 
-        # Planning 2: the 2-3 types the detector handles reliably. In simulation
-        # it found 3/3 of each of these, and 0-1/3 of the other types.
+        # Planning 2: the types the detector handles most reliably.
         self.declare_parameter('inspect_classes', ['green_crystals', 'white_sphere'])
         self.declare_parameter('detection_confidence', 0.5)
         self.declare_parameter('detector_model', '')
-        # Channel order the YOLO model expects. The default model was trained on
-        # images saved with OpenCV, so it takes BGR as ultralytics assumes. The
-        # earlier models/artifact_yolov8n.pt was trained on channel-swapped
-        # images and needs False: given BGR it saw the orange cave walls as
-        # ice_formation in simulation (and the new model given RGB did too).
+        # Channel order the YOLO model expects: the default model takes BGR.
         self.declare_parameter('detector_input_bgr', True)
         self.declare_parameter('depth_sync_tolerance_sec', 0.05)
-        # two_phase: frontiers until the map is done, then camera coverage.
-        # interleaved: unseen regions compete with frontiers from the start
-        # (TwoPhaseExplorer). information_gain: next-best-view on the camera's
-        # expected view (InformationGainExplorer). info_tour: shortest route
-        # through every frontier and unseen cluster (InformationTourExplorer).
+        # two_phase / interleaved: TwoPhaseExplorer; information_gain:
+        # InformationGainExplorer; info_tour: InformationTourExplorer.
         self.declare_parameter('exploration_mode', 'info_tour')
 
         inspect_classes = frozenset(self.get_parameter('inspect_classes').value)
@@ -134,7 +115,7 @@ class CaveExplorer(Node):
         self.tf_buffer_ = Buffer()
         self.tf_listener_ = TransformListener(self.tf_buffer_, self)
 
-        # Perception (A) and localisation (B)
+        # Perception and localisation
         self.detector_ = self._load_detector()
         self.tracker_ = ArtifactTracker()
         # Artefact shapes for Nav2: the lidar, 1.0 m up, misses their wide bases.
@@ -142,16 +123,14 @@ class CaveExplorer(Node):
         self.depth_images_ = deque(maxlen=10)       # (stamp_ns, depth image)
         self.pending_batch_ = None
 
-        # Planning (C, with B's inspection planner)
+        # Planning
         self.goal_pub_ = self.create_publisher(PoseStamped, 'exploration_goal', 1)
         self.navigation_ = NavigationClient(self)
         mode = self.get_parameter('exploration_mode').value
         if mode not in EXPLORATION_MODES:
             raise ValueError(f'exploration_mode {mode!r} is not one of {EXPLORATION_MODES}')
         interleave = mode == 'interleaved'
-        # Interleaved, both gains are capped at what one stop shows the camera:
-        # its view sector (85 m2) of a region, its chord (15.6 m) of a frontier.
-        # Uncapped, a 135 m frontier outbid an unseen room beside the robot by 40 m.
+        # Interleaved: cap both gains at what one camera view covers.
         view = CoverageExplorer()
         sector_m2 = 0.5 * view.fov_rad * view.view_range_m ** 2
         chord_m = 2.0 * view.view_range_m * math.sin(view.fov_rad / 2.0)
@@ -180,8 +159,7 @@ class CaveExplorer(Node):
         self.coverage_pub_ = self.create_publisher(OccupancyGrid, 'camera_coverage', 1)
         self.obstacle_pub_ = self.create_publisher(PointCloud2, 'artifact_obstacles', 1)
         self.obstacle_timer_ = self.create_timer(1.0, self.publish_artifact_obstacles)
-        # Backing off after getting stuck: Nav2's goal is cancelled first, so
-        # nothing else drives cmd_vel meanwhile.
+        # Back off after getting stuck (Nav2's goal is already cancelled).
         self.cmd_vel_pub_ = self.create_publisher(Twist, 'cmd_vel', 1)
         self.backoff_until_ns_ = None
         self.backoff_timer_ = self.create_timer(0.1, self.back_off)
@@ -237,7 +215,7 @@ class CaveExplorer(Node):
         self._localise_pending()
 
     def image_callback(self, image_msg: Image):
-        """Detect artefacts (A), publish the annotated image, then localise them (B)."""
+        """Detect artefacts, publish the annotated image, then localise them."""
         if self.detector_ is None:
             return
         stamp_ns = Time.from_msg(image_msg.header.stamp).nanoseconds
@@ -247,7 +225,7 @@ class CaveExplorer(Node):
 
         annotated = self.detector_.annotate(bgr, batch)
         out = self.cv_bridge_.cv2_to_imgmsg(annotated, encoding='bgr8')
-        out.header = image_msg.header       # keep the capture time and frame (Workplan 5)
+        out.header = image_msg.header       # keep the capture time and frame
         self.image_detections_pub_.publish(out)
 
         if batch.detections:
@@ -255,11 +233,7 @@ class CaveExplorer(Node):
             self._localise_pending()
 
     def _localise_pending(self):
-        """Hand the latest batch to the tracker once its depth and TF are available.
-
-        Tried from the image, depth and timer callbacks, because the depth image
-        and the TF for the capture time can each arrive after the RGB image.
-        """
+        """Hand the latest batch to the tracker once its depth and TF have arrived."""
         batch = self.pending_batch_
         if batch is None:
             return
@@ -341,12 +315,9 @@ class CaveExplorer(Node):
         self.last_plan_ns_ = self.get_clock().now().nanoseconds
 
     def on_stuck(self, robot_pose) -> float:
-        """Remember where the robot stuck, back it off; return seconds to wait.
+        """Mark where the robot stuck and back it off; return seconds to wait.
 
-        Only when Nav2 still had a path: then the controller could not follow it
-        and something under the chassis held the robot. Without a recent /plan,
-        Nav2 could not plan to the goal (in simulation, a goal inside a keep-out
-        disk); the goal is already given up and there is nothing to mark.
+        Only if Nav2 still had a recent /plan (the robot was held, not unroutable).
         """
         now_ns = self.get_clock().now().nanoseconds
         if self.last_plan_ns_ is None or now_ns - self.last_plan_ns_ > PLAN_FRESH_SEC * 1e9:

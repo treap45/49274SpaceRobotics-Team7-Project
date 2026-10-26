@@ -1,27 +1,16 @@
-"""Shared data contracts between the perception, tracking and planning modules.
+"""Shared data types between the perception, tracking and planning modules.
 
-Owner: A/B/C (joint review).
-Contract: repository-root Workplan.md, section 4.
-
-Conventions (Workplan 4.1):
-  * Distances are metres and angles are radians.
+Conventions:
+  * Distances in metres, angles in radians.
   * Map positions are in the ``map`` frame; navigation goals are ``PoseStamped``.
-  * ``stamp_ns`` is the ROS simulation time of the original observation as an
-    integer nanosecond count. Every timeout compares against the same clock.
-    Clear cached observations, tracks and action records if time goes backwards.
-  * Bounding boxes are ``(x_min, y_min, x_max, y_max)`` in the original RGB
-    image resolution. The right and bottom edges are exclusive.
-  * Failure is reported through a status value, never through a sentinel
-    coordinate: ``(0.0, 0.0)`` is a valid position in the cave.
+  * ``stamp_ns`` is the ROS (simulation) time of the observation in integer
+    nanoseconds; caches are cleared if time goes backwards.
+  * Bounding boxes are ``(x_min, y_min, x_max, y_max)`` in image pixels; right
+    and bottom edges are exclusive.
+  * Failure is a status value, never a sentinel coordinate.
 
-Every payload here is a frozen dataclass holding tuples rather than lists, so a
-snapshot handed to another module cannot be mutated behind the producer's back.
-This is the one place these definitions tighten Workplan.md section 4.2, which
-sketches ``detections`` as a ``list``; the read-only-snapshot rule in section
-4.1 is the reason. Raise it in review if it causes friction.
-
-Thresholds, clustering radii and inspection parameters do not belong here -
-they are configuration, per Workplan.md section 4.1.
+Payloads are frozen dataclasses holding tuples, so a snapshot cannot be
+changed by the module that receives it.
 """
 
 from dataclasses import dataclass
@@ -30,11 +19,10 @@ from enum import Enum
 from geometry_msgs.msg import PoseStamped
 
 # --------------------------------------------------------------------------
-# Label table (Workplan 4.1)
+# Label table
 # --------------------------------------------------------------------------
-# These are the five artefact types actually placed in worlds/mars_cave.sdf,
-# six instances of each. Same-class artefacts are only distinguishable by
-# position, so association must not merge them on class alone (Workplan 4.3).
+# Same-class artefacts differ only by position, so association must not
+# merge them on class alone.
 
 GREEN_ALIEN = 'green_alien'
 GREEN_CRYSTALS = 'green_crystals'
@@ -52,15 +40,12 @@ ARTIFACT_CLASSES = frozenset({
 
 
 # --------------------------------------------------------------------------
-# A -> B: two-dimensional detections (Workplan 4.2)
+# Detector -> tracker: 2D detections
 # --------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class Detection2D:
-    """One detected artefact in one image.
-
-    Produced by A. Carries no depth and no map position - those are B's result.
-    """
+    """One detected artefact in one image (no depth or map position)."""
 
     class_name: str
     confidence: float
@@ -89,12 +74,8 @@ class Detection2D:
 
 @dataclass(frozen=True)
 class DetectionBatch:
-    """Every detection from a single image, with that image's metadata.
-
-    ``stamp_ns`` and ``source_frame_id`` are the capture time and frame of the
-    input image, not of the moment inference finished. B must look up depth and
-    TF at ``stamp_ns``, so A preserves them even when inference lags.
-    """
+    """Every detection from one image; ``stamp_ns`` and ``source_frame_id`` are
+    the image's capture time and frame, used to look up depth and TF."""
 
     stamp_ns: int
     source_frame_id: str
@@ -125,20 +106,15 @@ class DetectionBatch:
 
 
 # --------------------------------------------------------------------------
-# B -> C: artefact map snapshot (Workplan 4.3)
+# Tracker -> behaviour manager: artefact map snapshot
 # --------------------------------------------------------------------------
 
 @dataclass(frozen=True)
 class ArtifactTrack:
-    """One artefact B believes exists, at its fused map position.
+    """One confirmed artefact at its fused map position.
 
-    ``artifact_id`` is assigned once the track is confirmed and never changes
-    afterwards. B keeps provisional tracks internal, so all merging and
-    de-duplication happens before an id exists and C never sees one move - there
-    is deliberately no old-id-to-new-id remapping mechanism (Workplan 4.3).
-
-    ``last_seen_ns`` answers "is it in view now?", which is not the same
-    question as "have we ever seen it?".
+    ``artifact_id`` never changes; if two tracks are merged, the newer id is
+    retired. ``last_seen_ns`` tells whether it is in view now.
     """
 
     artifact_id: int
@@ -161,7 +137,7 @@ class ArtifactTrack:
 
 
 # --------------------------------------------------------------------------
-# B -> C: observation goals and inspection assessment (Workplan 4.4)
+# Inspection planner: observation goals and inspection assessment
 # --------------------------------------------------------------------------
 
 class InspectionGoalStatus(Enum):
@@ -186,13 +162,8 @@ class InspectionEvaluation(Enum):
 
 @dataclass(frozen=True)
 class InspectionGoal:
-    """Where the robot should stand to inspect an artefact.
-
-    ``goal`` is the observation pose for the robot, not the artefact's own
-    position. B checks local clearance and heading; C confirms reachability
-    through the planner, because geometric safety does not imply Nav2 can
-    get there.
-    """
+    """Where the robot should stand to inspect an artefact (checked for local
+    clearance; Nav2 still decides whether it is reachable)."""
 
     status: InspectionGoalStatus
     goal: PoseStamped | None
@@ -216,7 +187,7 @@ class InspectionAssessment:
 
 
 # --------------------------------------------------------------------------
-# C internal: exploration and navigation (Workplan 4.5)
+# Exploration and navigation
 # --------------------------------------------------------------------------
 
 class ExplorationGoalStatus(Enum):
@@ -250,11 +221,7 @@ class ExplorationGoal:
 
 
 class NavigationStatus(Enum):
-    """Lifecycle of one ``NavigateToPose`` request.
-
-    Only ``SUCCEEDED`` means the robot arrived. The template code treats every
-    terminal callback as arrival; do not carry that over.
-    """
+    """Lifecycle of one ``NavigateToPose`` request; only ``SUCCEEDED`` means arrival."""
 
     PENDING = 'PENDING'
     ACTIVE = 'ACTIVE'
@@ -287,14 +254,8 @@ _TERMINAL_NAVIGATION_STATUSES = frozenset({
 class NavigationProgress:
     """What ``NavigationClient.poll`` reports for one request.
 
-    ``distance_remaining`` is carried through from Nav2 feedback. It is ``None``
-    until the first feedback message arrives, and on a request that never became
-    active. C accumulates it for the travelled-distance metric; B uses it to
-    monitor an approach.
-
-    ``reason`` explains a non-success terminal status, and is what C passes on
-    to ``FrontierExplorer.report_outcome``. Polling an unknown request id is an
-    ``ERROR`` with a reason, not an exception.
+    ``distance_remaining`` comes from Nav2 feedback (None until the first one);
+    ``reason`` explains a non-success status. An unknown id gives ``ERROR``.
     """
 
     status: NavigationStatus
@@ -316,20 +277,12 @@ class NavigationProgress:
 
 
 # --------------------------------------------------------------------------
-# C owns inspection state; B owns observations (Workplan 4.6)
+# Inspection records
 # --------------------------------------------------------------------------
 
 class InspectionState(Enum):
-    """Inspection progress for one ``artifact_id``.
-
-    ``UNVISITED -> IN_PROGRESS -> VISITED`` on success, or ``-> DEFERRED`` on
-    failure, which returns the robot to exploration. ``VISITED`` is set only on
-    a successful inspection.
-
-    ``DEFERRED`` is terminal for the run: it is not re-enabled later. That keeps
-    a still-visible artefact from retriggering an attempt on the next frame, and
-    matches the task sheet, which allows abandoning the attempt outright. A
-    cooldown-and-retry policy is future work, not current behaviour.
+    """Inspection progress for one ``artifact_id``:
+    ``UNVISITED -> IN_PROGRESS -> VISITED`` on success, or ``DEFERRED`` on failure.
     """
 
     UNVISITED = 'UNVISITED'
@@ -340,7 +293,7 @@ class InspectionState(Enum):
 
 @dataclass(frozen=True)
 class InspectionRecord:
-    """C's record for one artefact, snapshotted read-only to B for markers."""
+    """Inspection record for one artefact."""
 
     artifact_id: int
     state: InspectionState

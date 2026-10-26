@@ -1,40 +1,18 @@
-"""Observation poses and inspection success for one artefact.
+"""Observation poses and inspection success for one artefact (Planning 2).
 
-Owner: B.
-Contract: repository-root Workplan.md, section 4.4.
+``make_goal`` places the robot facing the artefact, outside its keep-out disk
+(measured width / 2 plus ``keep_out_margin_m``). Candidates go round the
+artefact starting on the side facing the robot: the eight 45° bearings first,
+then the bearings between them, then a larger stand-off. A candidate must be
+known free, ``clearance_m`` from walls, and have line of sight to the
+artefact's edge. Candidates within ``exclude_angle_deg`` of a pose in
+``exclude`` are skipped, so a retry looks from another side.
 
-``make_goal`` places the robot ``stand_off_m`` from the artefact, facing it;
-an artefact with a measured width (``size_of``, from ``ArtifactTracker``) is
-viewed from outside its keep-out disk, ``keep_out_margin_m`` beyond its edge.
-Candidates go round the artefact, starting on the side facing the robot, then
-at a larger stand-off. The eight 45 deg bearings come first; the bearings half
-way between them are tried only after those, for an artefact against a cave
-wall, where half the ring is rock: in simulation a green_crystals against the
-wall had every 45 deg candidate rejected. A candidate is kept only if its
-cell is known free, it has ``clearance_m`` to every occupied cell (robot
-radius 0.5 m plus margin) and the camera has a line of sight to the
-artefact's edge (its keep-out radius). Nav2 plans on an inflated
-costmap rather than this grid, so a pose that passes here can still be
-rejected; ``exclude`` lists poses already tried so the next call returns a
-different one (Workplan 4.4). A candidate within ``exclude_angle_deg`` of a
-tried pose's bearing round the artefact is excluded, so a retry looks from
-another side: in simulation the detector could not see a green_crystals from
-one side, and the retry (0.3 m exclusion) went 0.5 m further along the same
-bearing and failed again.
-
-``evaluate`` follows the task sheet's Planning 2: reach a close-range
-viewpoint "keeping the artefact in view". It is SATISFIED once the robot has
-been within the distance and heading tolerances for ``hold_time_sec`` of ROS
-time, having seen the artefact from within ``sighting_range_m`` during the last
-``sighting_window_sec``. It does not demand a detection at the viewpoint
-itself: in simulation the detector stopped seeing artefacts inside about 2 m,
-so that rule failed every inspection. It is LOST when the robot has been at
-close range for ``sighting_window_sec`` without seeing the artefact; the time
-counts from when it came within range, or from the last sighting if later, and
-restarts with every ``make_goal``. Counted from the last sighting alone, an
-artefact queued behind another, or viewed from 3.7 m, was LOST on arrival.
-Far away and unseen is still PENDING: the camera usually loses the artefact
-while the robot drives round to it.
+``evaluate`` is SATISFIED once the robot has held the distance and heading
+tolerances for ``hold_time_sec`` after seeing the artefact from within
+``sighting_range_m`` in the last ``sighting_window_sec``. It is LOST when the
+robot has been in range that long without seeing it (the clock restarts with
+each ``make_goal``); far away and unseen is still PENDING.
 """
 
 import math
@@ -74,21 +52,10 @@ class InspectionPlanner:
         keep_out_margin_m: float = 1.0,
         size_of=None,
     ):
-        """``sighting_window_sec`` covers the last few metres of the approach
-        at the robot's ~0.5 m/s plus ``hold_time_sec``.
-
-        ``distance_tolerance_m`` matches Nav2's ``xy_goal_tolerance`` (1.0 m in
-        nav2_params.yaml): Nav2 reports arrival anywhere within that of the
-        viewpoint, and in simulation stopped 2.0 m from an artefact whose
-        viewpoint was at 1.2 m. A tighter window is never satisfied there.
-
-        ``keep_out_margin_m`` covers the chassis' 0.71 m half-diagonal plus 0.3 m.
+        """``distance_tolerance_m`` matches Nav2's 1.0 m goal tolerance;
+        ``heading_tolerance_deg`` allows for Nav2's yaw tolerance plus that offset.
+        ``keep_out_margin_m`` covers the chassis half-diagonal plus a margin.
         ``size_of(artifact_id)`` returns a measured width in metres or None.
-
-        ``heading_tolerance_deg`` exceeds Nav2's ``yaw_goal_tolerance`` (0.5 rad,
-        28.6 deg) plus the bearing change from stopping up to 1.0 m off the
-        viewpoint; at 30 deg a green_crystals inspection failed at 34 deg. The
-        camera's 120 deg field of view still holds the artefact at 40 deg.
         """
         self.stand_off_m = stand_off_m
         self.distance_tolerance_m = distance_tolerance_m
@@ -105,13 +72,10 @@ class InspectionPlanner:
 
         # artifact_id -> ROS time (ns) since which all conditions have held.
         self._holding_since = {}
-        # artifact_id -> last_seen_ns of the latest sighting that arrived while
-        # the robot was within sighting_range_m, and the last_seen_ns from the
-        # previous call, so an old far sighting is not credited as close.
+        # artifact_id -> latest sighting made within sighting_range_m.
         self._close_sighting = {}
         self._previous_seen = {}
-        # artifact_id -> ROS time (ns) the robot came within view range for the
-        # current viewpoint; the LOST clock runs from here.
+        # artifact_id -> when the robot came within range; the LOST clock starts here.
         self._in_range_since = {}
 
     # ------------------------------------------------------------------
@@ -138,10 +102,8 @@ class InspectionPlanner:
                     'no line of sight': 0}
 
         base = self.stand_off_for(track)
-        # The artefact's own body must not block the view of it: the line of
-        # sight ends at its keep-out radius. Since the tracker places a wide
-        # artefact at its centre, a 0.4 m stop put a green_crystals' own lidar
-        # returns between every candidate and its centre.
+        # The line of sight ends at the keep-out radius, so the artefact's own
+        # body does not block it.
         keep_out = keep_out_radius_m(self.size_of(track.artifact_id)) if self.size_of else None
         stop_short = max(0.4, keep_out or 0.0)
         for stand_off in (base + extra for extra in self.extra_stand_off_m):
@@ -228,7 +190,7 @@ class InspectionPlanner:
                 + ('' if seen_ok else f', not seen within {sighting_range:g} m lately'))
 
         since = self._holding_since.setdefault(artifact_id, now_ns)
-        if now_ns < since:      # time went backwards (Workplan 4.1)
+        if now_ns < since:      # time went backwards
             since = self._holding_since[artifact_id] = now_ns
         held_ns = now_ns - since
         if held_ns >= self.hold_time_ns:

@@ -1,34 +1,17 @@
-"""Artefact shapes for Nav2's costmaps, from the depth pixels inside detection boxes.
+"""Artefact obstacles for Nav2's costmaps, from depth pixels inside detection boxes.
 
-Owner: C.
+The lidar is 1.0 m up and misses the wide low bases of some artefacts, so Nav2
+would plan across them. Depth pixels inside each detection box are projected
+to ``map``; points between ``min_height_m`` and ``max_height_m`` become
+occupied voxels, accumulated over the run and published as one point cloud.
+Only pixels inside boxes are used, so the floor and walls stay out.
 
-The lidar is mounted 1.0 m up (``scan_joint`` in mars_explorer.urdf.xacro).
-green_crystals and ice_formation are about 5 m across at the base but narrow at
-lidar height, so the costmap holds only a few spikes and Nav2 plans across the
-base. In simulation the robot sat stuck for 3.5 min on the green_crystals near
-the start.
+Two more sources cover parts too low for the depth cloud:
 
-Each detection's box is sampled on a pixel grid; its depth pixels are
-unprojected (optical frame, Workplan 5) and transformed to ``map``, and points
-between ``min_height_m`` and ``max_height_m`` are kept as occupied voxels. The
-voxels accumulate over the run and are published as one point cloud that Nav2
-marks as obstacles. Using only pixels inside boxes keeps the floor and the
-cave walls - which the lidar already has - out of the cloud.
-
-The depth cloud cannot hold parts below ``min_height_m``, yet the chassis
-clears the floor by only ~6 cm (1.0 x 1.0 m box at z = 0.047 m on 0.033 m
-wheels), and the robot still stuck on low parts of an artefact with the depth
-cloud running. Two further sources, neither using any prior knowledge of the
-artefacts:
-
-* ``keep_out_points`` fills a disk round each confirmed artefact whose radius
-  is half its width as measured by ``ArtifactTracker`` (box width times depth),
-  capped at ``max_radius_m``. Only for the types the detector handles reliably
-  (the inspection classes): in simulation a false ice_formation 4 m from any
-  real artefact put a 3 m disk over two coverage goals, and Nav2 could not
-  plan to either.
-* ``mark_contact`` records where the robot got stuck: a patch ahead of the
-  chassis, kept for the rest of the run, so Nav2 plans round it next time.
+* ``keep_out_points``: a disk round each confirmed artefact of the inspection
+  classes, radius half its measured width, capped at ``max_radius_m``.
+* ``mark_contact``: a patch ahead of the chassis where the robot got stuck,
+  kept for the rest of the run.
 """
 
 import math
@@ -47,8 +30,7 @@ class ArtifactObstacles:
                  min_height_m: float = 0.15,
                  max_height_m: float = 2.0,
                  max_range_m: float = 6.0):
-        """``min_height_m`` sits above the floor (z = 0.04 m in map in simulation).
-        ``max_range_m`` keeps to where depth is accurate enough to draw a shape."""
+        """``min_height_m`` keeps the floor out; ``max_range_m`` keeps depth accurate."""
         self.voxel_m = voxel_m
         self.pixel_step = pixel_step
         self.min_height_m = min_height_m
@@ -67,12 +49,9 @@ class ArtifactObstacles:
     def mark_contact(self, x: float, y: float, yaw: float, *,
                      ahead_from_m: float = 0.3, ahead_to_m: float = 1.0,
                      half_width_m: float = 0.6, height_m: float = 0.5) -> int:
-        """Mark the patch ahead of a robot at (x, y, yaw) that could not move.
+        """Mark the patch ahead of a stuck robot at (x, y, yaw); return how many voxels were new.
 
-        The chassis front is 0.5 m ahead of ``base_link``; whatever stopped it is
-        under or just beyond it. The patch must be clear of the robot once it
-        has backed off, or Nav2 would see the robot in collision. Returns how
-        many voxels were new.
+        The patch starts at the chassis front, so the robot is clear of it once it backs off.
         """
         step = self.voxel_m / 2.0
         ahead = np.arange(ahead_from_m, ahead_to_m + 1e-9, step)
@@ -86,11 +65,10 @@ class ArtifactObstacles:
         return len(self._contacts) - before
 
     def add(self, detections, depth, camera_model, transform) -> int:
-        """Add the voxels seen inside every box of ``detections``; return how many were new.
+        """Add the voxels inside every box of ``detections``; return how many were new.
 
-        ``depth`` is the depth image captured with the detections (metres),
-        ``transform`` is ``map <- camera_rgb_optical_frame`` at that time, as a
-        ``TransformStamped`` or the dict ``ArtifactTracker`` uses.
+        ``depth`` is in metres; ``transform`` is ``map <- camera_rgb_optical_frame``
+        at the capture time (``TransformStamped`` or dict).
         """
         depth = np.asarray(depth, dtype=np.float32)
         height, width = depth.shape[:2]
@@ -145,11 +123,8 @@ def keep_out_points(tracks, size_of, robot_xy, classes=None, *,
                     robot_clear_m: float = 1.0) -> np.ndarray:
     """A filled disk of points round every track, sized by its measured width.
 
-    ``size_of(artifact_id)`` returns the width from ``ArtifactTracker.size_m``.
-    ``classes``, if given, limits the disks to those artefact types.
-    A disk is shrunk to stay ``robot_clear_m`` from ``robot_xy`` (or dropped),
-    so a robot already inside one is never marked as in collision. Returns an
-    (N, 3) float32 array in ``map`` at ``height_m``, inside Nav2's obstacle band.
+    ``classes`` limits the disks to those types. A disk is shrunk to stay
+    ``robot_clear_m`` from the robot. Returns (N, 3) float32 points in ``map``.
     """
     disks = []
     for track in tracks:
