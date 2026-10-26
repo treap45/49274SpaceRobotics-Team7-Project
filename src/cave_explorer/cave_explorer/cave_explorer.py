@@ -355,7 +355,7 @@ class CaveExplorer(Node):
             header, np.concatenate((self.obstacles_.points(), disks))))
 
     def publish_artifact_markers(self, tracks):
-        """One sphere and label per confirmed artefact, coloured by inspection state."""
+        """One sphere and label (id, class, state, map x/y) per confirmed artefact, coloured by state."""
         states = {record.artifact_id: record.state for record in self.manager_.records}
         clear_all = Marker()
         clear_all.header.frame_id = MAP_FRAME
@@ -382,7 +382,8 @@ class CaveExplorer(Node):
                 else:
                     marker.pose.position.z += 0.8
                     marker.scale.z = 0.4
-                    marker.text = f'{track.artifact_id}: {label}'
+                    x, y = track.position_map[:2]
+                    marker.text = f'{track.artifact_id}: {label}\n({x:.1f}, {y:.1f}) m'
                 markers.append(marker)
         self.marker_pub_.publish(MarkerArray(markers=markers))
 
